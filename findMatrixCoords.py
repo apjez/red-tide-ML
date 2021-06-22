@@ -15,7 +15,7 @@ def findMatrixCoords(file_path, sample_lats, sample_lons):
 	longitude = nav_dataset['longitude']
 
 	# Exclude point if the nearest lat+lon is not closer than eta
-	eta = 0.01
+	eta = 0.02
 
 	latarr = np.array(latitude).flatten()
 	longarr = np.array(longitude).flatten()
