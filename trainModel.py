@@ -13,8 +13,9 @@ from sklearn.metrics import accuracy_score, confusion_matrix
 import matplotlib.pyplot as plt
 
 numEpochs = 1000
-learning_rate = 0.001
-mb_size = 10
+learning_rate = 0.01
+mb_size = 100
+num_classes = 4
 loss = nn.BCELoss()
 
 paired_df = pd.read_pickle('paired_dataset.pkl')
@@ -41,15 +42,13 @@ for i in range(len(classes)):
 		classes[i] = 1
 	elif(concentrations[i] < 100000):
 		classes[i] = 2
-	elif(concentrations[i] < 1000000):
-		classes[i] = 3
 	else:
-		classes[i] = 4
+		classes[i] = 3
 
 values, counts = np.unique(classes, return_counts=True)
 pointsPerClass = np.min(counts)
 reducedInds = np.array([])
-for i in range(5):
+for i in range(num_classes):
 	class_inds = np.where(classes == i)[0]
 	reducedInds = np.append(reducedInds, class_inds[np.random.choice(class_inds.shape[0], pointsPerClass)])
 
@@ -71,7 +70,7 @@ trainClasses = classes[trainInds]
 
 trainClasses = trainClasses.astype(int)
 
-trainTargets = np.zeros((trainClasses.shape[0], 5))
+trainTargets = np.zeros((trainClasses.shape[0], num_classes))
 for i in range(len(trainClasses)):
 	trainTargets[i, trainClasses[i]] = 1
 
@@ -79,7 +78,7 @@ testClasses = classes[testInds]
 
 testClasses = testClasses.astype(int)
 
-testTargets = np.zeros((testClasses.shape[0], 5))
+testTargets = np.zeros((testClasses.shape[0], num_classes))
 for i in range(len(testClasses)):
 	testTargets[i, testClasses[i]] = 1
 
