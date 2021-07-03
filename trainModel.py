@@ -12,15 +12,15 @@ from torch.utils.data import DataLoader, Dataset
 from sklearn.metrics import accuracy_score, confusion_matrix
 import matplotlib.pyplot as plt
 
-numEpochs = 1000
-learning_rate = 0.01
+numEpochs = 10000
+learning_rate = 0.001
 mb_size = 100
-num_classes = 4
+num_classes = 2
 loss = nn.BCELoss()
 
 paired_df = pd.read_pickle('paired_dataset.pkl')
 
-features_to_use=['chlor_a', 'nflh', 'Rrs_412', 'Rrs_443', 'Rrs_469', 'Rrs_488', 'Rrs_531', 'Rrs_547', 'Rrs_555', 'Rrs_645',\
+features_to_use=['Sample Date', 'chlor_a', 'nflh', 'Rrs_412', 'Rrs_443', 'Rrs_469', 'Rrs_488', 'Rrs_531', 'Rrs_547', 'Rrs_555', 'Rrs_645',\
 	'Rrs_667', 'Rrs_678', 'Red Tide Concentration']
 
 paired_df = paired_df[features_to_use]
@@ -30,21 +30,20 @@ paired_df = paired_df.dropna()
 
 red_tide = paired_df['Red Tide Concentration'].to_numpy().copy()
 
-features = paired_df[features_to_use[:-1]]
+dates = paired_df['Sample Date'].to_numpy().copy()
+
+features = paired_df[features_to_use[1:-1]]
 
 concentrations = red_tide
 classes = np.zeros((concentrations.shape[0], 1))
 
 for i in range(len(classes)):
-	if(concentrations[i] < 1000):
+	if(concentrations[i] < 100000):
 		classes[i] = 0
-	elif(concentrations[i] < 10000):
-		classes[i] = 1
-	elif(concentrations[i] < 100000):
-		classes[i] = 2
 	else:
-		classes[i] = 3
+		classes[i] = 1
 
+#Balance classes by number of samples
 values, counts = np.unique(classes, return_counts=True)
 pointsPerClass = np.min(counts)
 reducedInds = np.array([])
@@ -60,8 +59,10 @@ featuresTensor = torch.tensor(features.values)
 
 reducedFeaturesTensor = featuresTensor[reducedInds, :]
 
-trainInds = sample(range(reducedFeaturesTensor.shape[0]), int(0.8*reducedFeaturesTensor.shape[0]))
-testInds = list(set(range(reducedFeaturesTensor.shape[0]))-set(trainInds))
+dates = dates[reducedInds]
+
+trainInds = np.where(dates < np.datetime64('2018-01-01'))[0]
+testInds = np.where(dates >= np.datetime64('2018-01-01'))[0]
 
 trainSet = reducedFeaturesTensor[trainInds, :].float().cuda()
 testSet = reducedFeaturesTensor[testInds, :].float().cuda()
@@ -88,8 +89,8 @@ testTargets = torch.Tensor(testTargets).float().cuda()
 trainDataset = RedTideDataset(trainSet, trainTargets)
 trainDataloader = DataLoader(trainDataset, batch_size=mb_size, shuffle=True)
 
-predictor = Predictor(trainSet.shape[1]).cuda()
-optimizer = optim.SGD(predictor.parameters(), lr=learning_rate)
+predictor = Predictor(trainSet.shape[1], num_classes).cuda()
+optimizer = optim.Adam(predictor.parameters(), lr=learning_rate)
 
 losses = np.zeros((numEpochs, 1))
 
