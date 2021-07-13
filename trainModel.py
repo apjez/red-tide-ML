@@ -8,6 +8,7 @@ import torch.optim as optim
 from random import sample
 from model import *
 from dataset import *
+from convertFeaturesByDepth import *
 from torch.utils.data import DataLoader, Dataset
 from sklearn.metrics import accuracy_score, confusion_matrix
 import matplotlib.pyplot as plt
@@ -24,7 +25,7 @@ paired_df = pd.read_pickle('paired_dataset.pkl')
 #features_to_use=['Sample Date', 'Latitude', 'aot_869', 'angstrom', 'Rrs_412', 'Rrs_443', 'Rrs_469', 'Rrs_488',\
 #	'Rrs_531', 'Rrs_547', 'Rrs_555', 'Rrs_645',\
 #	'Rrs_667', 'Rrs_678', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'par', 'ipar', 'nflh', 'Red Tide Concentration']
-features_to_use=['Sample Date', 'Latitude', 'angstrom', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'nflh', 'bedrock', 'Red Tide Concentration']
+features_to_use=['Sample Date', 'Latitude', 'angstrom', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'nflh', 'bedrock', 'Red Tide Concentration', 'Rrs_443', 'Rrs_555']
 
 paired_df = paired_df[features_to_use]
 
@@ -37,7 +38,10 @@ dates = paired_df['Sample Date'].to_numpy().copy()
 
 latitudes = paired_df['Latitude'].to_numpy().copy()
 
-features = paired_df[features_to_use[2:-1]]
+features = paired_df[features_to_use[2:-3]]
+
+features = np.array(features.values)
+features = convertFeaturesByDepth(features, features_to_use[2:-4])
 
 concentrations = red_tide
 classes = np.zeros((concentrations.shape[0], 1))
@@ -62,7 +66,7 @@ for model_number in range(num_models):
 
 	classes = classes[reducedInds]
 
-	featuresTensor = torch.tensor(features.values)
+	featuresTensor = torch.tensor(features)
 
 	reducedFeaturesTensor = featuresTensor[reducedInds, :]
 
