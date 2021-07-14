@@ -9,7 +9,7 @@ from random import sample
 from model import *
 from dataset import *
 from convertFeaturesByDepth import *
-from LinLeeDetector import *
+from SotoEtAlDetector import *
 from torch.utils.data import DataLoader, Dataset
 from sklearn.metrics import accuracy_score, confusion_matrix
 import matplotlib.pyplot as plt
@@ -76,7 +76,7 @@ for model_number in range(num_models):
 
 	testSetLinLee = reducedFeaturesLinLee[testInds, :].astype(float)
 
-	outputLinLee = LinLeeDetector(testSetLinLee)
+	outputLinLee = SotoEtAlDetector(testSetLinLee)
 
 	testClasses = classes[testInds]
 

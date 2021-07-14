@@ -1,7 +1,9 @@
 import numpy as np
 
+# Implements red tide detection method from Soto et al
+# https://ioccg.org/wp-content/uploads/2021/05/ioccg_report_20-habs-2021-web.pdf (Chapter 6)
 # features are in order ['chl_ocx', 'nflh', 'Rrs_443', 'Rrs_555']
-def LinLeeDetector(features):
+def SotoEtAlDetector(features):
 	#QAA to derive b_bp from Lee et al. 2002
 	rrs_443 = features[:, 2]/(0.52 + 1.7*features[:, 2])
 	rrs_555 = features[:, 3]/(0.52 + 1.7*features[:, 3])
