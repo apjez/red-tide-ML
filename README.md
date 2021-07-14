@@ -1,4 +1,4 @@
-# Extract FWC Data
+# Red Tide ML
 
 This repository works with data from MODIS-AQUA (https://oceancolor.gsfc.nasa.gov/cgi/browse.pl?sen=amod), as well as in situ data from FWC (https://myfwc.com/research/redtide/monitoring/database/). It pairs pixels from the remote sensing as well as from the in situ data to create a paired dataset. It also contains code to train and evaluate models based on that paired data.
 
