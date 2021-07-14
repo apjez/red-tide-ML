@@ -115,7 +115,7 @@ feature_importance = np.zeros(testSet.shape[1])
 for i in range(testSet.shape[1]):
 	feature_importance[i] = np.mean(permu_accs[:, i])
 
-print('Average Accuracy Lin+Lee: {}'.format(np.mean(accsLinLee)))
+print('Average Accuracy Soto et al: {}'.format(np.mean(accsLinLee)))
 print('Average Accuracy: {}'.format(np.mean(accs)))
 
 inds = np.argsort(feature_importance)
