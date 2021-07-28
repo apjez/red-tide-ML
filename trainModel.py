@@ -8,16 +8,28 @@ import torch.optim as optim
 from random import sample
 from model import *
 from dataset import *
+from utils import *
 from convertFeaturesByDepth import *
+from convertFeaturesByPosition import *
 from torch.utils.data import DataLoader, Dataset
 from sklearn.metrics import accuracy_score, confusion_matrix
+import json
+from configparser import ConfigParser
 import matplotlib.pyplot as plt
 
-numEpochs = 5000
-learning_rate = 0.0001
-mb_size = 100
-num_classes = 2
-num_models = 10
+configfilename = 'random_train_test'
+
+config = ConfigParser()
+config.read('configfiles/'+configfilename+'.ini')
+
+numEpochs = config.getint('main', 'numEpochs')
+learning_rate = config.getfloat('main', 'learning_rate')
+mb_size = config.getint('main', 'mb_size')
+num_classes = config.getint('main', 'num_classes')
+randomseeds = json.loads(config.get('main', 'randomseeds'))
+depth_normalize = config.getboolean('main', 'depth_normalize')
+traintest_split = config.getint('main', 'traintest_split')
+
 loss = nn.BCELoss()
 
 paired_df = pd.read_pickle('paired_dataset.pkl')
@@ -25,7 +37,7 @@ paired_df = pd.read_pickle('paired_dataset.pkl')
 #features_to_use=['Sample Date', 'Latitude', 'aot_869', 'angstrom', 'Rrs_412', 'Rrs_443', 'Rrs_469', 'Rrs_488',\
 #	'Rrs_531', 'Rrs_547', 'Rrs_555', 'Rrs_645',\
 #	'Rrs_667', 'Rrs_678', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'par', 'ipar', 'nflh', 'Red Tide Concentration']
-features_to_use=['Sample Date', 'Latitude', 'angstrom', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'nflh', 'bedrock', 'Red Tide Concentration', 'Rrs_443', 'Rrs_555']
+features_to_use=['Sample Date', 'Latitude', 'Longitude', 'angstrom', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'nflh', 'bedrock', 'Red Tide Concentration', 'Rrs_443', 'Rrs_555']
 
 paired_df = paired_df[features_to_use]
 
@@ -37,11 +49,15 @@ red_tide = paired_df['Red Tide Concentration'].to_numpy().copy()
 dates = paired_df['Sample Date'].to_numpy().copy()
 
 latitudes = paired_df['Latitude'].to_numpy().copy()
+longitudes = paired_df['Longitude'].to_numpy().copy()
 
-features = paired_df[features_to_use[2:-3]]
-
+features = paired_df[features_to_use[1:-3]]
 features = np.array(features.values)
-features = convertFeaturesByDepth(features, features_to_use[2:-4])
+
+if(depth_normalize):
+	features = convertFeaturesByDepth(features[:, 2:], features_to_use[3:-4])
+else:
+	features = convertFeaturesByPosition(features[:, :-1], features_to_use[3:-4])
 
 concentrations = red_tide
 classes = np.zeros((concentrations.shape[0], 1))
@@ -52,10 +68,15 @@ for i in range(len(classes)):
 	else:
 		classes[i] = 1
 
-for model_number in range(num_models):
+for model_number in range(len(randomseeds)):
+	# Set up random seeds for reproducability
+	torch.manual_seed(randomseeds[model_number])
+	np.random.seed(randomseeds[model_number])
 
 	#Balance classes by number of samples
 	values, counts = np.unique(classes, return_counts=True)
+	values = values[0:num_classes]
+	counts = counts[0:num_classes]
 	pointsPerClass = np.min(counts)
 	reducedInds = np.array([])
 	for i in range(num_classes):
@@ -73,12 +94,15 @@ for model_number in range(num_models):
 	dates = dates[reducedInds]
 	latitudes = latitudes[reducedInds]
 
-	trainInds = sample(range(reducedFeaturesTensor.shape[0]), int(0.8*reducedFeaturesTensor.shape[0]))
-	testInds = list(set(range(reducedFeaturesTensor.shape[0]))-set(trainInds))
-	#trainInds = np.where(dates < np.datetime64('2018-01-01'))[0]
-	#testInds = np.where(dates >= np.datetime64('2018-01-01'))[0]
-	#trainInds = np.logical_or(latitudes >= 27, latitudes < 26.5)
-	#testInds = np.logical_and(latitudes < 27, latitudes >= 26.5)
+	if(traintest_split == 0):
+		trainInds = sample(range(reducedFeaturesTensor.shape[0]), int(0.8*reducedFeaturesTensor.shape[0]))
+		testInds = list(set(range(reducedFeaturesTensor.shape[0]))-set(trainInds))
+	elif(traintest_split == 1):
+		trainInds = np.where(dates < np.datetime64('2018-01-01'))[0]
+		testInds = np.where(dates >= np.datetime64('2018-01-01'))[0]
+	elif(traintest_split == 2):
+		trainInds = np.logical_or(latitudes >= 27, latitudes < 26.5)
+		testInds = np.logical_and(latitudes < 27, latitudes >= 26.5)
 
 	trainSet = reducedFeaturesTensor[trainInds, :].float().cuda()
 	testSet = reducedFeaturesTensor[testInds, :].float().cuda()
@@ -131,6 +155,8 @@ for model_number in range(num_models):
 	testOutput = np.argmax(testOutput, axis=1)
 	print(confusion_matrix(testClasses, testOutput))
 
-	torch.save(predictor.state_dict(), 'saved_model_info/predictor{}.pt'.format(model_number))
-	np.save('saved_model_info/reducedInds{}.npy'.format(model_number), reducedInds)
-	np.save('saved_model_info/testInds{}.npy'.format(model_number), testInds)
+	ensure_folder('saved_model_info/'+configfilename)
+
+	torch.save(predictor.state_dict(), 'saved_model_info/'+configfilename+'/predictor{}.pt'.format(model_number))
+	np.save('saved_model_info/'+configfilename+'/reducedInds{}.npy'.format(model_number), reducedInds)
+	np.save('saved_model_info/'+configfilename+'/testInds{}.npy'.format(model_number), testInds)
