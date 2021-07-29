@@ -85,29 +85,29 @@ for model_number in range(len(randomseeds)):
 
 	reducedInds = reducedInds.astype(int)
 
-	classes = classes[reducedInds]
+	usedClasses = classes[reducedInds]
 
 	featuresTensor = torch.tensor(features)
 
 	reducedFeaturesTensor = featuresTensor[reducedInds, :]
 
-	dates = dates[reducedInds]
-	latitudes = latitudes[reducedInds]
+	usedDates = dates[reducedInds]
+	usedLatitudes = latitudes[reducedInds]
 
 	if(traintest_split == 0):
 		trainInds = sample(range(reducedFeaturesTensor.shape[0]), int(0.8*reducedFeaturesTensor.shape[0]))
 		testInds = list(set(range(reducedFeaturesTensor.shape[0]))-set(trainInds))
 	elif(traintest_split == 1):
-		trainInds = np.where(dates < np.datetime64('2018-01-01'))[0]
-		testInds = np.where(dates >= np.datetime64('2018-01-01'))[0]
+		trainInds = np.where(usedDates < np.datetime64('2018-01-01'))[0]
+		testInds = np.where(usedDates >= np.datetime64('2018-01-01'))[0]
 	elif(traintest_split == 2):
-		trainInds = np.logical_or(latitudes >= 27, latitudes < 26.5)
-		testInds = np.logical_and(latitudes < 27, latitudes >= 26.5)
+		trainInds = np.logical_or(usedLatitudes >= 27, usedLatitudes < 26.5)
+		testInds = np.logical_and(usedLatitudes < 27, usedLatitudes >= 26.5)
 
 	trainSet = reducedFeaturesTensor[trainInds, :].float().cuda()
 	testSet = reducedFeaturesTensor[testInds, :].float().cuda()
 
-	trainClasses = classes[trainInds]
+	trainClasses = usedClasses[trainInds]
 
 	trainClasses = trainClasses.astype(int)
 
@@ -115,7 +115,7 @@ for model_number in range(len(randomseeds)):
 	for i in range(len(trainClasses)):
 		trainTargets[i, trainClasses[i]] = 1
 
-	testClasses = classes[testInds]
+	testClasses = usedClasses[testInds]
 
 	testClasses = testClasses.astype(int)
 
