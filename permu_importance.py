@@ -10,16 +10,17 @@ from random import sample
 from model import *
 from dataset import *
 from utils import *
+from convertROC import *
 from convertFeaturesByDepth import *
 from convertFeaturesByPosition import *
 from SotoEtAlDetector import *
 from torch.utils.data import DataLoader, Dataset
-from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.metrics import accuracy_score, confusion_matrix, roc_curve
 import json
 from configparser import ConfigParser
 import matplotlib.pyplot as plt
 
-configfilename = 'random_train_test'
+configfilename = 'date_train_test_depth_norm'
 
 config = ConfigParser()
 config.read('configfiles/'+configfilename+'.ini')
@@ -29,7 +30,7 @@ learning_rate = config.getfloat('main', 'learning_rate')
 mb_size = config.getint('main', 'mb_size')
 num_classes = config.getint('main', 'num_classes')
 randomseeds = json.loads(config.get('main', 'randomseeds'))
-depth_normalize = config.getboolean('main', 'depth_normalize')
+normalization = config.getint('main', 'normalization')
 traintest_split = config.getint('main', 'traintest_split')
 
 file_path = 'PinellasMonroeCoKareniabrevis 2010-2020.06.12.xlsx'
@@ -92,9 +93,11 @@ features = paired_df[features_to_use[1:-3]]
 features_used = features_to_use[3:-4]
 
 features = np.array(features.values)
-if(depth_normalize):
+if(normalization == 0):
+	features = features[:, 2:-1]
+elif(normalization == 1):
 	features = convertFeaturesByDepth(features[:, 2:], features_to_use[3:-4])
-else:
+elif(normalization == 2):
 	features = convertFeaturesByPosition(features[:, :-1], features_to_use[3:-4])
 
 concentrations = red_tide
@@ -111,6 +114,13 @@ confusonMatrixSum = np.zeros((num_classes, num_classes))
 accsLinLee = np.zeros((len(randomseeds), 1))
 permu_accs = np.zeros((len(randomseeds), len(features_used)))
 accsNN = np.zeros((len(randomseeds), 1))
+
+refFpr = []
+tprs = []
+refFprNN = []
+tprsNN = []
+fprsSoto = []
+tprsSoto = []
 
 for model_number in range(len(randomseeds)):
 
@@ -151,10 +161,9 @@ for model_number in range(len(randomseeds)):
 
 	output = output.detach().cpu().numpy()
 
-	output = np.argmax(output, axis=1)
-
 	reducedDates = pd.DatetimeIndex(reducedDates)
-	nn_preds = np.zeros_like(output)
+	nn_preds = np.zeros((output.shape[0]))
+	nn_concs = np.zeros((output.shape[0]))
 	#Do some nearest neighbor thing with the last week's samples
 	for i in range(len(reducedDates)):
 		searchdate = reducedDates[i]
@@ -167,17 +176,59 @@ for model_number in range(len(randomseeds)):
 			idx = find_nearest_latlon(df_lats[week_prior_inds], df_lons[week_prior_inds], reducedLatitudes[i], reducedLongitudes[i])
 
 			closestConc = df_concs[week_prior_inds][idx]
+			nn_concs[i] = closestConc
 			if(closestConc < 100000):
 				nn_preds[i] = 0
 			else:
 				nn_preds[i] = 1
 		else:
+			nn_concs[i] = 0
 			nn_preds[i] = 0
 
-	accs[model_number] = accuracy_score(testClasses, output)
-	confusonMatrixSum += confusion_matrix(testClasses, output)
+	accs[model_number] = accuracy_score(testClasses, np.argmax(output, axis=1))
+	confusonMatrixSum += confusion_matrix(testClasses, np.argmax(output, axis=1))
 	accsLinLee[model_number] = accuracy_score(testClasses, outputLinLee)
 	accsNN[model_number] = accuracy_score(testClasses, nn_preds)
+
+	false_positives = 0
+	true_positives = 0
+	total_negatives = 0
+	total_positives = 0
+
+	for i in range(len(testClasses)):
+		if(testClasses[i] == 0):
+			if(outputLinLee[i] != 0):
+				false_positives += 1
+			total_negatives += 1
+		else:
+			if(outputLinLee[i] == 1):
+				true_positives += 1
+			total_positives += 1
+
+	fpr = false_positives/total_negatives
+	tpr = true_positives/total_positives
+	fprsSoto.append(fpr)
+	tprsSoto.append(tpr)
+
+	fpr, tpr, thresholds = roc_curve(testClasses, output[:, 1])
+	if(model_number == 0):
+		refFpr = fpr
+		tprs = tpr
+		tprs = np.expand_dims(tprs, axis=1)
+	else:
+		refTpr = convertROC(fpr, tpr, refFpr)
+		refTpr = np.expand_dims(refTpr, axis=1)
+		tprs = np.concatenate((tprs, refTpr), axis=1)
+
+	fpr, tpr, thresholds = roc_curve(testClasses, nn_concs)
+	if(model_number == 0):
+		refFprNN = fpr
+		tprsNN = tpr
+		tprsNN = np.expand_dims(tprsNN, axis=1)
+	else:
+		refTprNN = convertROC(fpr, tpr, refFprNN)
+		refTprNN = np.expand_dims(refTprNN, axis=1)
+		tprsNN = np.concatenate((tprsNN, refTprNN), axis=1)
 
 	feature_permu = np.random.permutation(testSet.shape[0])
 	for i in range(testSet.shape[1]):
@@ -208,3 +259,21 @@ inds = np.argsort(feature_importance)
 inds = np.flip(inds)
 for i in range(testSet.shape[1]):
 	print('{}: {}'.format(features_used[inds[i]], feature_importance[inds[i]]))
+
+filename_roc_curve_info = 'roc_curve_info'
+
+refFpr = np.expand_dims(refFpr, axis=1)
+fpr_and_tprs = np.concatenate((refFpr, tprs), axis=1)
+
+np.save(filename_roc_curve_info+'/'+configfilename+'.npy', fpr_and_tprs)
+
+refFprNN = np.expand_dims(refFprNN, axis=1)
+fpr_and_tprsNN = np.concatenate((refFprNN, tprsNN), axis=1)
+
+np.save(filename_roc_curve_info+'/'+configfilename.split('_')[0]+'_NN.npy', fpr_and_tprsNN)
+
+fpr_and_tprsSoto = np.zeros(2)
+fpr_and_tprsSoto[0] = np.mean(fprsSoto)
+fpr_and_tprsSoto[1] = np.mean(tprsSoto)
+
+np.save(filename_roc_curve_info+'/'+configfilename.split('_')[0]+'_Soto.npy', fpr_and_tprsSoto)

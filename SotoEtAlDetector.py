@@ -23,7 +23,7 @@ def SotoEtAlDetector(features):
 	bbp_555_ratio = bbp_555_QAA/bbp_555_MOREL
 
 	red_tide = np.zeros_like(u_555)
-	red_tide_inds = np.where((features[:, 0]>1.5) & (features[:, 1]>0.01) & (bbp_555_ratio<1))
+	red_tide_inds = np.where((features[:, 0]>1.5) & (features[:, 1]>0.1) & (bbp_555_ratio<1))
 	red_tide[red_tide_inds[0]] = 1
 
 	return red_tide

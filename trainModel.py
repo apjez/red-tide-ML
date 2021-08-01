@@ -17,7 +17,7 @@ import json
 from configparser import ConfigParser
 import matplotlib.pyplot as plt
 
-configfilename = 'random_train_test'
+configfilename = 'position_train_test_depth_norm'
 
 config = ConfigParser()
 config.read('configfiles/'+configfilename+'.ini')
@@ -27,7 +27,7 @@ learning_rate = config.getfloat('main', 'learning_rate')
 mb_size = config.getint('main', 'mb_size')
 num_classes = config.getint('main', 'num_classes')
 randomseeds = json.loads(config.get('main', 'randomseeds'))
-depth_normalize = config.getboolean('main', 'depth_normalize')
+normalization = config.getint('main', 'normalization')
 traintest_split = config.getint('main', 'traintest_split')
 
 loss = nn.BCELoss()
@@ -54,9 +54,11 @@ longitudes = paired_df['Longitude'].to_numpy().copy()
 features = paired_df[features_to_use[1:-3]]
 features = np.array(features.values)
 
-if(depth_normalize):
+if(normalization == 0):
+	features = features[:, 2:-1]
+elif(normalization == 1):
 	features = convertFeaturesByDepth(features[:, 2:], features_to_use[3:-4])
-else:
+elif(normalization == 2):
 	features = convertFeaturesByPosition(features[:, :-1], features_to_use[3:-4])
 
 concentrations = red_tide
