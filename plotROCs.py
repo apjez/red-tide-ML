@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from cycler import cycler
 from os import listdir
 from os.path import isfile, join
 
@@ -14,9 +15,14 @@ for file in files:
 	file_splits.append(file.split('_')[0])
 split_uniques = np.unique(file_splits)
 
+plotColors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+plotNumber = 0
+
 last_unique = 'None'
 
 plt.figure(dpi=500)
+plt.plot([0, 1], [0, 1], 'k--')
+plt.plot([0, 0, 1, 1, 0], [0, 1, 1, 0, 0], 'k')
 
 for file in files:
 	# Check if file name is a new type
@@ -31,6 +37,9 @@ for file in files:
 		plt.savefig(last_unique+'.png')
 
 		plt.figure(dpi=500)
+		plt.plot([0, 1], [0, 1], 'k--')
+		plt.plot([0, 0, 1, 1, 0], [0, 1, 1, 0, 0], 'k')
+		plotNumber = 0
 	last_unique = split
 
 	fpr_and_tprs = np.load(filename_roc_curve_info+'/'+file)
@@ -50,14 +59,16 @@ for file in files:
 		fpr = np.append(fpr, 1)
 		tpr_means = np.append(tpr_means, 1)
 		tpr_stds = np.append(tpr_stds, 1)
-		plt.plot(fpr, tpr_means, label=file)
+		plt.plot(fpr, tpr_means, label=file, color=plotColors[plotNumber])
 		x_values = np.concatenate((fpr, np.flip(fpr)))
 		y_values = np.concatenate((tpr_means+tpr_stds, np.flip(tpr_means-tpr_stds)))
-		plt.fill(x_values, y_values, alpha=0.3)
+		plt.fill(x_values, y_values, alpha=0.3, color=plotColors[plotNumber])
+		plotNumber += 1
 	else:
 		fpr = fpr_and_tprs[0]
 		tpr = fpr_and_tprs[1]
-		plt.scatter(fpr, tpr, label=file)
+		plt.scatter(fpr, tpr, label=file, color=plotColors[plotNumber])
+		plotNumber += 1
 
 plt.xlabel('False Positive Rate')
 plt.ylabel('True Positive Rate')
