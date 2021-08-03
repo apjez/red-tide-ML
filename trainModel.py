@@ -18,7 +18,7 @@ import json
 from configparser import ConfigParser
 import matplotlib.pyplot as plt
 
-configfilename = 'random_train_test_depth_norm_w_nn'
+configfilename = 'date_train_test_depth_norm_w_nn'
 
 config = ConfigParser()
 config.read('configfiles/'+configfilename+'.ini')
@@ -130,6 +130,7 @@ if(use_nn_feature == True):
 		else:
 			nn_classes[i] = 0
 
+	ensure_folder('saved_model_info/'+configfilename)
 	np.save('saved_model_info/'+configfilename+'/nn_classes.npy', nn_classes)
 	features = np.concatenate((features, np.expand_dims(nn_classes, axis=1)), axis=1)
 
