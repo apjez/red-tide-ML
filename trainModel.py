@@ -11,13 +11,14 @@ from dataset import *
 from utils import *
 from convertFeaturesByDepth import *
 from convertFeaturesByPosition import *
+import datetime as dt
 from torch.utils.data import DataLoader, Dataset
 from sklearn.metrics import accuracy_score, confusion_matrix
 import json
 from configparser import ConfigParser
 import matplotlib.pyplot as plt
 
-configfilename = 'position_train_test_depth_norm'
+configfilename = 'random_train_test_depth_norm_w_nn'
 
 config = ConfigParser()
 config.read('configfiles/'+configfilename+'.ini')
@@ -29,6 +30,7 @@ num_classes = config.getint('main', 'num_classes')
 randomseeds = json.loads(config.get('main', 'randomseeds'))
 normalization = config.getint('main', 'normalization')
 traintest_split = config.getint('main', 'traintest_split')
+use_nn_feature = config.getboolean('main', 'use_nn_feature')
 
 loss = nn.BCELoss()
 
@@ -45,9 +47,7 @@ paired_df = paired_df[features_to_use]
 paired_df = paired_df.dropna()
 
 red_tide = paired_df['Red Tide Concentration'].to_numpy().copy()
-
 dates = paired_df['Sample Date'].to_numpy().copy()
-
 latitudes = paired_df['Latitude'].to_numpy().copy()
 longitudes = paired_df['Longitude'].to_numpy().copy()
 
@@ -69,6 +69,73 @@ for i in range(len(classes)):
 		classes[i] = 0
 	else:
 		classes[i] = 1
+
+
+
+
+if(use_nn_feature == True):
+	file_path = 'PinellasMonroeCoKareniabrevis 2010-2020.06.12.xlsx'
+
+	df = pd.read_excel(file_path, engine='openpyxl')
+	df_dates = df['Sample Date']
+	df_lats = df['Latitude'].to_numpy()
+	df_lons = df['Longitude'].to_numpy()
+	df_concs = df['Karenia brevis abundance (cells/L)'].to_numpy()
+
+	df_conc_classes = np.zeros_like(df_concs)
+	for i in range(len(df_conc_classes)):
+		if(df_concs[i] < 100000):
+			df_conc_classes[i] = 0
+		else:
+			df_conc_classes[i] = 1
+
+	#Balance classes by number of samples
+	values, counts = np.unique(df_conc_classes, return_counts=True)
+	values = values[0:num_classes]
+	counts = counts[0:num_classes]
+	pointsPerClass = np.min(counts)
+	reducedInds = np.array([])
+	for i in range(num_classes):
+		if(i==0):
+			class_inds = np.where(df_concs < 100000)[0]
+		else:
+			class_inds = np.where(df_concs >= 100000)[0]
+		reducedInds = np.append(reducedInds, class_inds[np.random.choice(class_inds.shape[0], pointsPerClass)])
+
+	reducedInds = reducedInds.astype(int)
+	df_dates = df_dates[reducedInds]
+	df_dates = df_dates.reset_index()
+	df_lats = df_lats[reducedInds]
+	df_lons = df_lons[reducedInds]
+	df_concs = df_concs[reducedInds]
+
+	dataDates = pd.DatetimeIndex(dates)
+	nn_classes = np.zeros((features.shape[0]))
+	#Do some nearest neighbor thing with the last week's samples
+	for i in range(len(dataDates)):
+		searchdate = dataDates[i]
+		weekbefore = searchdate - dt.timedelta(days=7)
+		twoweeksbefore = searchdate - dt.timedelta(days=14)
+		mask = (df_dates['Sample Date'] > twoweeksbefore) & (df_dates['Sample Date'] <= weekbefore)
+		week_prior_inds = df_dates[mask].index.values
+
+		if(week_prior_inds.size):
+			idx = find_nearest_latlon(df_lats[week_prior_inds], df_lons[week_prior_inds], latitudes[i], longitudes[i])
+
+			closestConc = df_concs[week_prior_inds][idx]
+			if(closestConc < 100000):
+				nn_classes[i] = 0
+			else:
+				nn_classes[i] = 1
+		else:
+			nn_classes[i] = 0
+
+	np.save('saved_model_info/'+configfilename+'/nn_classes.npy', nn_classes)
+	features = np.concatenate((features, np.expand_dims(nn_classes, axis=1)), axis=1)
+
+
+
+
 
 for model_number in range(len(randomseeds)):
 	# Set up random seeds for reproducability

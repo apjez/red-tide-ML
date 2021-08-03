@@ -20,7 +20,7 @@ import json
 from configparser import ConfigParser
 import matplotlib.pyplot as plt
 
-configfilename = 'date_train_test_depth_norm'
+configfilename = 'random_train_test_depth_norm_w_nn'
 
 config = ConfigParser()
 config.read('configfiles/'+configfilename+'.ini')
@@ -32,6 +32,7 @@ num_classes = config.getint('main', 'num_classes')
 randomseeds = json.loads(config.get('main', 'randomseeds'))
 normalization = config.getint('main', 'normalization')
 traintest_split = config.getint('main', 'traintest_split')
+use_nn_feature = config.getboolean('main', 'use_nn_feature')
 
 file_path = 'PinellasMonroeCoKareniabrevis 2010-2020.06.12.xlsx'
 
@@ -99,6 +100,11 @@ elif(normalization == 1):
 	features = convertFeaturesByDepth(features[:, 2:], features_to_use[3:-4])
 elif(normalization == 2):
 	features = convertFeaturesByPosition(features[:, :-1], features_to_use[3:-4])
+
+if(use_nn_feature == True):
+	nn_classes = np.load('saved_model_info/'+configfilename+'/nn_classes.npy')
+	features = np.concatenate((features, np.expand_dims(nn_classes, axis=1)), axis=1)
+	features_used.append('nearest_ground_truth')
 
 concentrations = red_tide
 classes = np.zeros((concentrations.shape[0], 1))
