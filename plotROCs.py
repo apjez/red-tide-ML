@@ -34,7 +34,7 @@ for file in files:
 		plt.ylim(-0.05, 1.05)
 		plt.title('Model Performance')
 		plt.legend(loc='lower right')
-		plt.savefig(last_unique+'.png')
+		plt.savefig(last_unique+'.png', bbox_inches='tight')
 
 		plt.figure(dpi=500)
 		plt.plot([0, 1], [0, 1], 'k--')
@@ -59,15 +59,15 @@ for file in files:
 		fpr = np.append(fpr, 1)
 		tpr_means = np.append(tpr_means, 1)
 		tpr_stds = np.append(tpr_stds, 1)
-		plt.plot(fpr, tpr_means, label=file, color=plotColors[plotNumber])
+		plt.plot(fpr, tpr_means, label=file, color=plotColors[plotNumber], zorder=0)
 		x_values = np.concatenate((fpr, np.flip(fpr)))
 		y_values = np.concatenate((tpr_means+tpr_stds, np.flip(tpr_means-tpr_stds)))
-		plt.fill(x_values, y_values, alpha=0.3, color=plotColors[plotNumber])
+		plt.fill(x_values, y_values, alpha=0.3, color=plotColors[plotNumber], zorder=0)
 		plotNumber += 1
 	else:
 		fpr = fpr_and_tprs[0]
 		tpr = fpr_and_tprs[1]
-		plt.scatter(fpr, tpr, label=file, color=plotColors[plotNumber])
+		plt.scatter(fpr, tpr, label=file, color=plotColors[plotNumber], zorder=10)
 		plotNumber += 1
 
 plt.xlabel('False Positive Rate')
@@ -76,4 +76,4 @@ plt.xlim(-0.05, 1.05)
 plt.ylim(-0.05, 1.05)
 plt.title('Model Performance')
 plt.legend(loc='lower right')
-plt.savefig(last_unique+'.png')
+plt.savefig(last_unique+'.png', bbox_inches='tight')
