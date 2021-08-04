@@ -18,7 +18,7 @@ import json
 from configparser import ConfigParser
 import matplotlib.pyplot as plt
 
-configfilename = 'date_train_test_depth_norm_w_nn'
+configfilename = 'position_train_test_depth_norm_w_nn'
 
 config = ConfigParser()
 config.read('configfiles/'+configfilename+'.ini')

@@ -14,6 +14,7 @@ from convertROC import *
 from convertFeaturesByDepth import *
 from convertFeaturesByPosition import *
 from SotoEtAlDetector import *
+from AminEtAlDetector import *
 from torch.utils.data import DataLoader, Dataset
 from sklearn.metrics import accuracy_score, confusion_matrix, roc_curve
 import json
@@ -74,7 +75,7 @@ paired_df = pd.read_pickle('paired_dataset.pkl')
 #features_to_use=['Sample Date', 'Latitude', 'aot_869', 'angstrom', 'Rrs_412', 'Rrs_443', 'Rrs_469', 'Rrs_488',\
 #	'Rrs_531', 'Rrs_547', 'Rrs_555', 'Rrs_645',\
 #	'Rrs_667', 'Rrs_678', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'par', 'ipar', 'nflh', 'Red Tide Concentration']
-features_to_use=['Sample Date', 'Latitude', 'Longitude', 'angstrom', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'nflh', 'bedrock', 'Red Tide Concentration', 'Rrs_443', 'Rrs_555']
+features_to_use=['Sample Date', 'Latitude', 'Longitude', 'angstrom', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'nflh', 'bedrock', 'Red Tide Concentration', 'Rrs_443', 'Rrs_555', 'Rrs_667', 'Rrs_678']
 
 paired_df = paired_df[features_to_use]
 
@@ -89,17 +90,18 @@ latitudes = paired_df['Latitude'].to_numpy().copy()
 longitudes = paired_df['Longitude'].to_numpy().copy()
 
 features_lin_lee = paired_df[['chl_ocx', 'nflh', 'Rrs_443', 'Rrs_555']].to_numpy().copy()
+features_amin = paired_df[['Rrs_667', 'Rrs_678']].to_numpy().copy()
 
-features = paired_df[features_to_use[1:-3]]
-features_used = features_to_use[3:-4]
+features = paired_df[features_to_use[1:-5]]
+features_used = features_to_use[3:-6]
 
 features = np.array(features.values)
 if(normalization == 0):
 	features = features[:, 2:-1]
 elif(normalization == 1):
-	features = convertFeaturesByDepth(features[:, 2:], features_to_use[3:-4])
+	features = convertFeaturesByDepth(features[:, 2:], features_to_use[3:-6])
 elif(normalization == 2):
-	features = convertFeaturesByPosition(features[:, :-1], features_to_use[3:-4])
+	features = convertFeaturesByPosition(features[:, :-1], features_to_use[3:-6])
 
 if(use_nn_feature == True):
 	nn_classes = np.load('saved_model_info/'+configfilename+'/nn_classes.npy')
@@ -127,6 +129,8 @@ refFprNN = []
 tprsNN = []
 fprsSoto = []
 tprsSoto = []
+fprsAmin = []
+tprsAmin = []
 
 for model_number in range(len(randomseeds)):
 
@@ -138,6 +142,7 @@ for model_number in range(len(randomseeds)):
 	reducedFeaturesTensor = featuresTensor[reducedInds, :]
 
 	reducedFeaturesLinLee = features_lin_lee[reducedInds, :]
+	reducedFeaturesAmin = features_amin[reducedInds, :]
 
 	reducedDates = dates[reducedInds]
 	reducedLatitudes = latitudes[reducedInds]
@@ -152,8 +157,10 @@ for model_number in range(len(randomseeds)):
 	testSet = reducedFeaturesTensor[testInds, :].float().cuda()
 
 	testSetLinLee = reducedFeaturesLinLee[testInds, :].astype(float)
+	testSetAmin = reducedFeaturesAmin[testInds, :].astype(float)
 
 	outputLinLee = SotoEtAlDetector(testSetLinLee)
+	outputAmin = AminEtAlDetector(testSetAmin)
 
 	testClasses = usedClasses[testInds]
 
@@ -215,6 +222,26 @@ for model_number in range(len(randomseeds)):
 	tpr = true_positives/total_positives
 	fprsSoto.append(fpr)
 	tprsSoto.append(tpr)
+
+	false_positives = 0
+	true_positives = 0
+	total_negatives = 0
+	total_positives = 0
+
+	for i in range(len(testClasses)):
+		if(testClasses[i] == 0):
+			if(outputAmin[i] != 0):
+				false_positives += 1
+			total_negatives += 1
+		else:
+			if(outputAmin[i] == 1):
+				true_positives += 1
+			total_positives += 1
+
+	fpr = false_positives/total_negatives
+	tpr = true_positives/total_positives
+	fprsAmin.append(fpr)
+	tprsAmin.append(tpr)
 
 	fpr, tpr, thresholds = roc_curve(testClasses, output[:, 1])
 	if(model_number == 0):
@@ -283,3 +310,9 @@ fpr_and_tprsSoto[0] = np.mean(fprsSoto)
 fpr_and_tprsSoto[1] = np.mean(tprsSoto)
 
 np.save(filename_roc_curve_info+'/'+configfilename.split('_')[0]+'_Soto.npy', fpr_and_tprsSoto)
+
+fpr_and_tprsAmin = np.zeros(2)
+fpr_and_tprsAmin[0] = np.mean(fprsAmin)
+fpr_and_tprsAmin[1] = np.mean(tprsAmin)
+
+np.save(filename_roc_curve_info+'/'+configfilename.split('_')[0]+'_Amin.npy', fpr_and_tprsAmin)
