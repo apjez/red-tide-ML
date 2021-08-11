@@ -21,7 +21,7 @@ import json
 from configparser import ConfigParser
 import matplotlib.pyplot as plt
 
-configfilename = 'random_train_test_depth_norm_w_nn'
+configfilename = 'random_train_test_depth_norm_w_knn'
 
 config = ConfigParser()
 config.read('configfiles/'+configfilename+'.ini')
@@ -33,7 +33,7 @@ num_classes = config.getint('main', 'num_classes')
 randomseeds = json.loads(config.get('main', 'randomseeds'))
 normalization = config.getint('main', 'normalization')
 traintest_split = config.getint('main', 'traintest_split')
-use_nn_feature = config.getboolean('main', 'use_nn_feature')
+use_nn_feature = config.getint('main', 'use_nn_feature')
 
 file_path = 'PinellasMonroeCoKareniabrevis 2010-2020.06.12.xlsx'
 
@@ -69,6 +69,9 @@ df_dates = df_dates.reset_index()
 df_lats = df_lats[reducedInds]
 df_lons = df_lons[reducedInds]
 df_concs = df_concs[reducedInds]
+df_concs_log = np.log10(df_concs)/np.max(np.log10(df_concs))
+df_concs_log[np.isinf(df_concs_log)] = 0
+df_classes = df_conc_classes[reducedInds]
 
 paired_df = pd.read_pickle('paired_dataset.pkl')
 
@@ -103,10 +106,14 @@ elif(normalization == 1):
 elif(normalization == 2):
 	features = convertFeaturesByPosition(features[:, :-1], features_to_use[3:-6])
 
-if(use_nn_feature == True):
+if(use_nn_feature == 1):
 	nn_classes = np.load('saved_model_info/'+configfilename+'/nn_classes.npy')
 	features = np.concatenate((features, np.expand_dims(nn_classes, axis=1)), axis=1)
 	features_used.append('nearest_ground_truth')
+if(use_nn_feature == 2):
+	knn_concs = np.load('saved_model_info/'+configfilename+'/knn_concs.npy')
+	features = np.concatenate((features, np.expand_dims(knn_concs, axis=1)), axis=1)
+	features_used.append('weighted_knn_conc')
 
 concentrations = red_tide
 classes = np.zeros((concentrations.shape[0], 1))
@@ -127,10 +134,14 @@ refFpr = []
 tprs = []
 refFprNN = []
 tprsNN = []
+refFprKNN = []
+tprsKNN = []
 fprsSoto = []
 tprsSoto = []
 fprsAmin = []
 tprsAmin = []
+
+beta = 1
 
 for model_number in range(len(randomseeds)):
 
@@ -176,6 +187,8 @@ for model_number in range(len(randomseeds)):
 
 	reducedDates = pd.DatetimeIndex(reducedDates)
 	nn_preds = np.zeros((output.shape[0]))
+	knn_preds = np.zeros((output.shape[0]))
+	knn_concs = np.zeros((output.shape[0]))
 	nn_concs = np.zeros((output.shape[0]))
 	#Do some nearest neighbor thing with the last week's samples
 	for i in range(len(reducedDates)):
@@ -186,17 +199,32 @@ for model_number in range(len(randomseeds)):
 		week_prior_inds = df_dates[mask].index.values
 
 		if(week_prior_inds.size):
+			physicalDistance = 100*np.sqrt((df_lats[week_prior_inds]-reducedLatitudes[i])**2 + (df_lons[week_prior_inds]-reducedLongitudes[i])**2)
+			daysBack = (searchdate - df_dates['Sample Date'][week_prior_inds]).astype('timedelta64[D]').values
+			totalDistance = physicalDistance + beta*daysBack
+			inverseDistance = 1/totalDistance
+			NN_weights = inverseDistance/np.sum(inverseDistance)
+			closestClasses = df_classes[week_prior_inds]
+			negativeInds = np.where(closestClasses==0)[0]
+			positiveInds = np.where(closestClasses==1)[0]
+
 			idx = find_nearest_latlon(df_lats[week_prior_inds], df_lons[week_prior_inds], reducedLatitudes[i], reducedLongitudes[i])
 
 			closestConc = df_concs[week_prior_inds][idx]
 			nn_concs[i] = closestConc
+			knn_concs[i] = np.sum(NN_weights*df_concs_log[week_prior_inds])
 			if(closestConc < 100000):
 				nn_preds[i] = 0
 			else:
 				nn_preds[i] = 1
+			if(np.sum(NN_weights[negativeInds]) > np.sum(NN_weights[positiveInds])):
+				knn_preds[i] = 0
+			else:
+				knn_preds[i] = 1
 		else:
 			nn_concs[i] = 0
 			nn_preds[i] = 0
+			knn_preds[i] = 0
 
 	accs[model_number] = accuracy_score(testClasses, np.argmax(output, axis=1))
 	confusonMatrixSum += confusion_matrix(testClasses, np.argmax(output, axis=1))
@@ -263,6 +291,16 @@ for model_number in range(len(randomseeds)):
 		refTprNN = np.expand_dims(refTprNN, axis=1)
 		tprsNN = np.concatenate((tprsNN, refTprNN), axis=1)
 
+	fpr, tpr, thresholds = roc_curve(testClasses, knn_concs)
+	if(model_number == 0):
+		refFprKNN = fpr
+		tprsKNN = tpr
+		tprsKNN = np.expand_dims(tprsKNN, axis=1)
+	else:
+		refTprKNN = convertROC(fpr, tpr, refFprKNN)
+		refTprKNN = np.expand_dims(refTprKNN, axis=1)
+		tprsKNN = np.concatenate((tprsKNN, refTprKNN), axis=1)
+
 	feature_permu = np.random.permutation(testSet.shape[0])
 	for i in range(testSet.shape[1]):
 		# permute feature i
@@ -304,6 +342,11 @@ refFprNN = np.expand_dims(refFprNN, axis=1)
 fpr_and_tprsNN = np.concatenate((refFprNN, tprsNN), axis=1)
 
 np.save(filename_roc_curve_info+'/'+configfilename.split('_')[0]+'_NN.npy', fpr_and_tprsNN)
+
+refFprKNN = np.expand_dims(refFprKNN, axis=1)
+fpr_and_tprsKNN = np.concatenate((refFprKNN, tprsKNN), axis=1)
+
+np.save(filename_roc_curve_info+'/'+configfilename.split('_')[0]+'_KNN.npy', fpr_and_tprsKNN)
 
 fpr_and_tprsSoto = np.zeros(2)
 fpr_and_tprsSoto[0] = np.mean(fprsSoto)

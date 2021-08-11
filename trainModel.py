@@ -18,7 +18,7 @@ import json
 from configparser import ConfigParser
 import matplotlib.pyplot as plt
 
-configfilename = 'position_train_test_depth_norm_w_nn'
+configfilename = 'date_train_test_depth_norm_w_knn'
 
 config = ConfigParser()
 config.read('configfiles/'+configfilename+'.ini')
@@ -30,7 +30,7 @@ num_classes = config.getint('main', 'num_classes')
 randomseeds = json.loads(config.get('main', 'randomseeds'))
 normalization = config.getint('main', 'normalization')
 traintest_split = config.getint('main', 'traintest_split')
-use_nn_feature = config.getboolean('main', 'use_nn_feature')
+use_nn_feature = config.getint('main', 'use_nn_feature')
 
 loss = nn.BCELoss()
 
@@ -70,10 +70,10 @@ for i in range(len(classes)):
 	else:
 		classes[i] = 1
 
+beta = 1
 
-
-
-if(use_nn_feature == True):
+# 0 = No nn features, 1 = nn, 2 = weighted knn
+if(use_nn_feature == 1 or use_nn_feature == 2):
 	file_path = 'PinellasMonroeCoKareniabrevis 2010-2020.06.12.xlsx'
 
 	df = pd.read_excel(file_path, engine='openpyxl')
@@ -108,9 +108,12 @@ if(use_nn_feature == True):
 	df_lats = df_lats[reducedInds]
 	df_lons = df_lons[reducedInds]
 	df_concs = df_concs[reducedInds]
+	df_concs_log = np.log10(df_concs)/np.max(np.log10(df_concs))
+	df_concs_log[np.isinf(df_concs_log)] = 0
 
 	dataDates = pd.DatetimeIndex(dates)
 	nn_classes = np.zeros((features.shape[0]))
+	knn_concs = np.zeros((features.shape[0]))
 	#Do some nearest neighbor thing with the last week's samples
 	for i in range(len(dataDates)):
 		searchdate = dataDates[i]
@@ -120,9 +123,16 @@ if(use_nn_feature == True):
 		week_prior_inds = df_dates[mask].index.values
 
 		if(week_prior_inds.size):
+			physicalDistance = 100*np.sqrt((df_lats[week_prior_inds]-latitudes[i])**2 + (df_lons[week_prior_inds]-longitudes[i])**2)
+			daysBack = (searchdate - df_dates['Sample Date'][week_prior_inds]).astype('timedelta64[D]').values
+			totalDistance = physicalDistance + beta*daysBack
+			inverseDistance = 1/totalDistance
+			NN_weights = inverseDistance/np.sum(inverseDistance)
+
 			idx = find_nearest_latlon(df_lats[week_prior_inds], df_lons[week_prior_inds], latitudes[i], longitudes[i])
 
 			closestConc = df_concs[week_prior_inds][idx]
+			knn_concs[i] = np.sum(NN_weights*df_concs_log[week_prior_inds])
 			if(closestConc < 100000):
 				nn_classes[i] = 0
 			else:
@@ -130,9 +140,14 @@ if(use_nn_feature == True):
 		else:
 			nn_classes[i] = 0
 
-	ensure_folder('saved_model_info/'+configfilename)
-	np.save('saved_model_info/'+configfilename+'/nn_classes.npy', nn_classes)
-	features = np.concatenate((features, np.expand_dims(nn_classes, axis=1)), axis=1)
+	if(use_nn_feature == 1):
+		ensure_folder('saved_model_info/'+configfilename)
+		np.save('saved_model_info/'+configfilename+'/nn_classes.npy', nn_classes)
+		features = np.concatenate((features, np.expand_dims(nn_classes, axis=1)), axis=1)
+	if(use_nn_feature == 2):
+		ensure_folder('saved_model_info/'+configfilename)
+		np.save('saved_model_info/'+configfilename+'/knn_concs.npy', knn_concs)
+		features = np.concatenate((features, np.expand_dims(knn_concs, axis=1)), axis=1)
 
 
 
