@@ -42,12 +42,13 @@ df_lons = df_lons[reducedInds]
 df_concs = df_concs[reducedInds]
 df_classes = df_conc_classes[reducedInds]
 
-betas = np.arange(0.05, 5, 0.05)
+daysBefores = np.arange(4, 64, 1)
+beta = 1
 
 knn_accs = []
 nn_accs = []
 iteration = 0
-for beta in betas:
+for daysBefore in daysBefores:
 	if(iteration%10 == 0):
 		print('Iteration #{}'.format(iteration))
 	iteration = iteration+1
@@ -59,7 +60,7 @@ for beta in betas:
 	for i in range(len(dataDates)):
 		searchdate = dataDates[i]
 		weekbefore = searchdate - dt.timedelta(days=3)
-		twoweeksbefore = searchdate - dt.timedelta(days=24)
+		twoweeksbefore = searchdate - dt.timedelta(days=int(daysBefore))
 		mask = (df_dates['Sample Date'] > twoweeksbefore) & (df_dates['Sample Date'] <= weekbefore)
 		week_prior_inds = df_dates[mask].index.values
 
@@ -94,10 +95,10 @@ for beta in betas:
 	nn_accs.append(metrics.accuracy_score(df_classes, nn_classes))
 
 plt.figure(dpi=500)
-plt.plot(betas, knn_accs, label='KNN')
-plt.plot(betas, nn_accs, label='NN')
-plt.xlabel('Beta')
+plt.plot(daysBefores, knn_accs, label='KNN')
+plt.plot(daysBefores, nn_accs, label='NN')
+plt.xlabel('Number of Days Back')
 plt.ylabel('Classification Accuracy')
 plt.legend()
 plt.title('Distance Function Analysis')
-plt.savefig('dist_func2new.png')
+plt.savefig('dist_func_daysbefore.png')

@@ -18,7 +18,7 @@ import json
 from configparser import ConfigParser
 import matplotlib.pyplot as plt
 
-configfilename = 'date_train_test_depth_norm_w_knn'
+configfilename = 'position_train_test_depth_norm_w_knn'
 
 config = ConfigParser()
 config.read('configfiles/'+configfilename+'.ini')
@@ -117,8 +117,8 @@ if(use_nn_feature == 1 or use_nn_feature == 2):
 	#Do some nearest neighbor thing with the last week's samples
 	for i in range(len(dataDates)):
 		searchdate = dataDates[i]
-		weekbefore = searchdate - dt.timedelta(days=7)
-		twoweeksbefore = searchdate - dt.timedelta(days=14)
+		weekbefore = searchdate - dt.timedelta(days=3)
+		twoweeksbefore = searchdate - dt.timedelta(days=10)
 		mask = (df_dates['Sample Date'] > twoweeksbefore) & (df_dates['Sample Date'] <= weekbefore)
 		week_prior_inds = df_dates[mask].index.values
 

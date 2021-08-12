@@ -21,7 +21,7 @@ import json
 from configparser import ConfigParser
 import matplotlib.pyplot as plt
 
-configfilename = 'random_train_test_depth_norm_w_knn'
+configfilename = 'random_train_test_depth_norm_w_nn'
 
 config = ConfigParser()
 config.read('configfiles/'+configfilename+'.ini')
@@ -193,8 +193,8 @@ for model_number in range(len(randomseeds)):
 	#Do some nearest neighbor thing with the last week's samples
 	for i in range(len(reducedDates)):
 		searchdate = reducedDates[i]
-		weekbefore = searchdate - dt.timedelta(days=7)
-		twoweeksbefore = searchdate - dt.timedelta(days=14)
+		weekbefore = searchdate - dt.timedelta(days=3)
+		twoweeksbefore = searchdate - dt.timedelta(days=10)
 		mask = (df_dates['Sample Date'] > twoweeksbefore) & (df_dates['Sample Date'] <= weekbefore)
 		week_prior_inds = df_dates[mask].index.values
 
