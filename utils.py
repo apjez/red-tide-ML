@@ -15,3 +15,8 @@ def find_nearest_latlon(lats, lons, lat_value, lon_value):
 	lons = np.asarray(lons)
 	idx = (np.abs(lats - lat_value)**2 + np.abs(lons - lon_value)**2).argmin()
 	return idx
+
+def find_nearest_batch(array, values):
+	array = np.asarray(array)
+	idx = (np.abs(array[:, None] - values)).argmin(axis=0)
+	return idx

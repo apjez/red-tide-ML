@@ -15,13 +15,15 @@ from convertFeaturesByDepth import *
 from convertFeaturesByPosition import *
 from SotoEtAlDetector import *
 from AminEtAlDetector import *
+from StumpfEtAlDetector import *
+from CannizzaroEtAlDetector import *
 from torch.utils.data import DataLoader, Dataset
 from sklearn.metrics import accuracy_score, confusion_matrix, roc_curve
 import json
 from configparser import ConfigParser
 import matplotlib.pyplot as plt
 
-configfilename = 'random_train_test_depth_norm_w_nn'
+configfilename = 'date_train_test_depth_norm_w_nn'
 
 config = ConfigParser()
 config.read('configfiles/'+configfilename+'.ini')
@@ -94,6 +96,8 @@ longitudes = paired_df['Longitude'].to_numpy().copy()
 
 features_lin_lee = paired_df[['chl_ocx', 'nflh', 'Rrs_443', 'Rrs_555']].to_numpy().copy()
 features_amin = paired_df[['Rrs_667', 'Rrs_678']].to_numpy().copy()
+features_stumpf = paired_df[['chlor_a']].to_numpy().copy()
+#features_cannizzaro = paired_df[['chl_ocx', 'Rrs_443', 'Rrs_555']].to_numpy().copy()
 
 features = paired_df[features_to_use[1:-5]]
 features_used = features_to_use[3:-6]
@@ -140,6 +144,10 @@ fprsSoto = []
 tprsSoto = []
 fprsAmin = []
 tprsAmin = []
+refFprStumpf = []
+tprsStumpf = []
+#fprsCannizzaro = []
+#tprsCannizzaro = []
 
 beta = 1
 
@@ -154,6 +162,8 @@ for model_number in range(len(randomseeds)):
 
 	reducedFeaturesLinLee = features_lin_lee[reducedInds, :]
 	reducedFeaturesAmin = features_amin[reducedInds, :]
+	reducedFeaturesStumpf = features_stumpf[reducedInds, :]
+	#reducedFeaturesCannizzaro = features_cannizzaro[reducedInds, :]
 
 	reducedDates = dates[reducedInds]
 	reducedLatitudes = latitudes[reducedInds]
@@ -169,9 +179,13 @@ for model_number in range(len(randomseeds)):
 
 	testSetLinLee = reducedFeaturesLinLee[testInds, :].astype(float)
 	testSetAmin = reducedFeaturesAmin[testInds, :].astype(float)
+	testSetStumpf = reducedFeaturesStumpf[testInds, :].astype(float)
+	#testSetCannizzaro = reducedFeaturesCannizzaro[testInds, :].astype(float)
 
 	outputLinLee = SotoEtAlDetector(testSetLinLee)
 	outputAmin = AminEtAlDetector(testSetAmin)
+	outputStumpf = StumpfEtAlDetector(testSetStumpf)
+	#outputCannizzaro = CannizzaroEtAlDetector(testSetCannizzaro)
 
 	testClasses = usedClasses[testInds]
 
@@ -271,6 +285,26 @@ for model_number in range(len(randomseeds)):
 	fprsAmin.append(fpr)
 	tprsAmin.append(tpr)
 
+	#false_positives = 0
+	#true_positives = 0
+	#total_negatives = 0
+	#total_positives = 0
+
+	#for i in range(len(testClasses)):
+	#	if(testClasses[i] == 0):
+	#		if(outputCannizzaro[i] != 0):
+	#			false_positives += 1
+	#		total_negatives += 1
+	#	else:
+	#		if(outputCannizzaro[i] == 1):
+	#			true_positives += 1
+	#		total_positives += 1
+
+	#fpr = false_positives/total_negatives
+	#tpr = true_positives/total_positives
+	#fprsCannizzaro.append(fpr)
+	#tprsCannizzaro.append(tpr)
+
 	fpr, tpr, thresholds = roc_curve(testClasses, output[:, 1])
 	if(model_number == 0):
 		refFpr = fpr
@@ -300,6 +334,16 @@ for model_number in range(len(randomseeds)):
 		refTprKNN = convertROC(fpr, tpr, refFprKNN)
 		refTprKNN = np.expand_dims(refTprKNN, axis=1)
 		tprsKNN = np.concatenate((tprsKNN, refTprKNN), axis=1)
+
+	fpr, tpr, thresholds = roc_curve(testClasses, outputStumpf)
+	if(model_number == 0):
+		refFprStumpf = fpr
+		tprsStumpf = tpr
+		tprsStumpf = np.expand_dims(tprsStumpf, axis=1)
+	else:
+		refTprStumpf = convertROC(fpr, tpr, refFprStumpf)
+		refTprStumpf = np.expand_dims(refTprStumpf, axis=1)
+		tprsStumpf = np.concatenate((tprsStumpf, refTprStumpf), axis=1)
 
 	feature_permu = np.random.permutation(testSet.shape[0])
 	for i in range(testSet.shape[1]):
@@ -348,6 +392,11 @@ fpr_and_tprsKNN = np.concatenate((refFprKNN, tprsKNN), axis=1)
 
 np.save(filename_roc_curve_info+'/'+configfilename.split('_')[0]+'_KNN.npy', fpr_and_tprsKNN)
 
+refFprStumpf = np.expand_dims(refFprStumpf, axis=1)
+fpr_and_tprsStumpf = np.concatenate((refFprStumpf, tprsStumpf), axis=1)
+
+np.save(filename_roc_curve_info+'/'+configfilename.split('_')[0]+'_Stumpf.npy', fpr_and_tprsStumpf)
+
 fpr_and_tprsSoto = np.zeros(2)
 fpr_and_tprsSoto[0] = np.mean(fprsSoto)
 fpr_and_tprsSoto[1] = np.mean(tprsSoto)
@@ -359,3 +408,9 @@ fpr_and_tprsAmin[0] = np.mean(fprsAmin)
 fpr_and_tprsAmin[1] = np.mean(tprsAmin)
 
 np.save(filename_roc_curve_info+'/'+configfilename.split('_')[0]+'_Amin.npy', fpr_and_tprsAmin)
+
+#fpr_and_tprsCannizzaro = np.zeros(2)
+#fpr_and_tprsCannizzaro[0] = np.mean(fprsCannizzaro)
+#fpr_and_tprsCannizzaro[1] = np.mean(tprsCannizzaro)
+
+#np.save(filename_roc_curve_info+'/'+configfilename.split('_')[0]+'_Cannizzaro.npy', fpr_and_tprsCannizzaro)
