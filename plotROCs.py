@@ -1,10 +1,12 @@
 import numpy as np
+import math
 import matplotlib.pyplot as plt
 from cycler import cycler
 from os import listdir
 from os.path import isfile, join
 
 filename_roc_curve_info = 'roc_curve_info'
+save_folder = 'roc_curve_plots'
 
 files = [f for f in listdir(filename_roc_curve_info) if isfile(join(filename_roc_curve_info, f))]
 
@@ -34,7 +36,7 @@ for file in files:
 		plt.ylim(-0.05, 1.05)
 		plt.title('Model Performance')
 		plt.legend(loc='lower right')
-		plt.savefig(last_unique+'.png', bbox_inches='tight')
+		plt.savefig(save_folder+'/'+last_unique+'.png', bbox_inches='tight')
 
 		plt.figure(dpi=500)
 		plt.plot([0, 1], [0, 1], 'k--')
@@ -59,15 +61,19 @@ for file in files:
 		fpr = np.append(fpr, 1)
 		tpr_means = np.append(tpr_means, 1)
 		tpr_stds = np.append(tpr_stds, 1)
-		plt.plot(fpr, tpr_means, label=file, color=plotColors[plotNumber], zorder=0)
+		# margin of error for 95% confidence interval
+		# margin of error = z*(population standard deviation/sqrt(n))
+		# for 95% CI, z=1.96
+		tpr_moes = 1.96*(tpr_stds/(math.sqrt(21)))
+		plt.plot(fpr, tpr_means, label=file, color=plotColors[plotNumber%len(plotColors)], zorder=0)
 		x_values = np.concatenate((fpr, np.flip(fpr)))
-		y_values = np.concatenate((tpr_means+tpr_stds, np.flip(tpr_means-tpr_stds)))
-		plt.fill(x_values, y_values, alpha=0.3, color=plotColors[plotNumber], zorder=0)
+		y_values = np.concatenate((tpr_means+tpr_moes, np.flip(tpr_means-tpr_moes)))
+		plt.fill(x_values, y_values, alpha=0.3, color=plotColors[plotNumber%len(plotColors)], zorder=0)
 		plotNumber += 1
 	else:
 		fpr = fpr_and_tprs[0]
 		tpr = fpr_and_tprs[1]
-		plt.scatter(fpr, tpr, label=file, color=plotColors[plotNumber], zorder=10)
+		plt.scatter(fpr, tpr, label=file, color=plotColors[plotNumber%len(plotColors)], zorder=10)
 		plotNumber += 1
 
 plt.xlabel('False Positive Rate')
@@ -76,4 +82,4 @@ plt.xlim(-0.05, 1.05)
 plt.ylim(-0.05, 1.05)
 plt.title('Model Performance')
 plt.legend(loc='lower right')
-plt.savefig(last_unique+'.png', bbox_inches='tight')
+plt.savefig(save_folder+'/'+last_unique+'.png', bbox_inches='tight')

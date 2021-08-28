@@ -4,7 +4,8 @@ import math
 import matplotlib.pyplot as plt
 
 file_folder = 'latlon_stats/'
-features = ['angstrom', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'nflh']
+features = ['angstrom', 'chlor_a', 'chl_ocx', 'Kd_490', 'nflh', 'poc']
+vmaxes = [1.5, 80, 80, 6, 0.75, 2000]
 
 for i in range(len(features)):
 	feature_n = np.load(file_folder+features[i]+'_n.npy')
@@ -25,14 +26,18 @@ for i in range(len(features)):
 				feature_std[j, k] = -1
 
 	plt.figure(dpi=500)
-	plt.imshow(feature_mean, origin='lower')
+	plt.imshow(feature_mean, origin='lower', vmin=-1, vmax=vmaxes[i])
 	plt.title(features[i]+' Mean')
-	plt.savefig(file_folder+features[i]+'_mean.png')
+	plt.axis('off')
+	#plt.colorbar()
+	plt.savefig(file_folder+features[i]+'_mean.png', bbox_inches='tight')
 
 	plt.figure(dpi=500)
 	plt.imshow(feature_std, origin='lower')
 	plt.title(features[i]+' Std')
-	plt.savefig(file_folder+features[i]+'_std.png')
+	plt.axis('off')
+	#plt.colorbar()
+	plt.savefig(file_folder+features[i]+'_std.png', bbox_inches='tight')
 
 	np.save(file_folder+features[i]+'_mean.npy', feature_mean)
 	np.save(file_folder+features[i]+'_std.npy', feature_std)

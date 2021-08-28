@@ -13,17 +13,18 @@ from utils import *
 from convertROC import *
 from convertFeaturesByDepth import *
 from convertFeaturesByPosition import *
-from SotoEtAlDetector import *
-from AminEtAlDetector import *
-from StumpfEtAlDetector import *
-from CannizzaroEtAlDetector import *
+from detectors.SotoEtAlDetector import *
+from detectors.AminEtAlDetector import *
+from detectors.StumpfEtAlDetector import *
+from detectors.CannizzaroEtAlDetector import *
+from detectors.ShehhiEtAlDetector import *
 from torch.utils.data import DataLoader, Dataset
 from sklearn.metrics import accuracy_score, confusion_matrix, roc_curve
 import json
 from configparser import ConfigParser
 import matplotlib.pyplot as plt
 
-configfilename = 'date_train_test_depth_norm_w_nn'
+configfilename = 'random_train_test_no_norm'
 
 config = ConfigParser()
 config.read('configfiles/'+configfilename+'.ini')
@@ -97,6 +98,7 @@ longitudes = paired_df['Longitude'].to_numpy().copy()
 features_lin_lee = paired_df[['chl_ocx', 'nflh', 'Rrs_443', 'Rrs_555']].to_numpy().copy()
 features_amin = paired_df[['Rrs_667', 'Rrs_678']].to_numpy().copy()
 features_stumpf = paired_df[['chlor_a']].to_numpy().copy()
+features_shehhi = paired_df[['nflh']].to_numpy().copy()
 #features_cannizzaro = paired_df[['chl_ocx', 'Rrs_443', 'Rrs_555']].to_numpy().copy()
 
 features = paired_df[features_to_use[1:-5]]
@@ -146,6 +148,8 @@ fprsAmin = []
 tprsAmin = []
 refFprStumpf = []
 tprsStumpf = []
+refFprShehhi = []
+tprsShehhi = []
 #fprsCannizzaro = []
 #tprsCannizzaro = []
 
@@ -163,6 +167,7 @@ for model_number in range(len(randomseeds)):
 	reducedFeaturesLinLee = features_lin_lee[reducedInds, :]
 	reducedFeaturesAmin = features_amin[reducedInds, :]
 	reducedFeaturesStumpf = features_stumpf[reducedInds, :]
+	reducedFeaturesShehhi = features_shehhi[reducedInds, :]
 	#reducedFeaturesCannizzaro = features_cannizzaro[reducedInds, :]
 
 	reducedDates = dates[reducedInds]
@@ -180,11 +185,13 @@ for model_number in range(len(randomseeds)):
 	testSetLinLee = reducedFeaturesLinLee[testInds, :].astype(float)
 	testSetAmin = reducedFeaturesAmin[testInds, :].astype(float)
 	testSetStumpf = reducedFeaturesStumpf[testInds, :].astype(float)
+	testSetShehhi = reducedFeaturesShehhi[testInds, :].astype(float)
 	#testSetCannizzaro = reducedFeaturesCannizzaro[testInds, :].astype(float)
 
 	outputLinLee = SotoEtAlDetector(testSetLinLee)
 	outputAmin = AminEtAlDetector(testSetAmin)
 	outputStumpf = StumpfEtAlDetector(testSetStumpf)
+	outputShehhi = ShehhiEtAlDetector(testSetShehhi)
 	#outputCannizzaro = CannizzaroEtAlDetector(testSetCannizzaro)
 
 	testClasses = usedClasses[testInds]
@@ -345,6 +352,16 @@ for model_number in range(len(randomseeds)):
 		refTprStumpf = np.expand_dims(refTprStumpf, axis=1)
 		tprsStumpf = np.concatenate((tprsStumpf, refTprStumpf), axis=1)
 
+	fpr, tpr, thresholds = roc_curve(testClasses, outputShehhi)
+	if(model_number == 0):
+		refFprShehhi = fpr
+		tprsShehhi = tpr
+		tprsShehhi = np.expand_dims(tprsShehhi, axis=1)
+	else:
+		refTprShehhi = convertROC(fpr, tpr, refFprShehhi)
+		refTprShehhi = np.expand_dims(refTprShehhi, axis=1)
+		tprsShehhi = np.concatenate((tprsShehhi, refTprShehhi), axis=1)
+
 	feature_permu = np.random.permutation(testSet.shape[0])
 	for i in range(testSet.shape[1]):
 		# permute feature i
@@ -396,6 +413,11 @@ refFprStumpf = np.expand_dims(refFprStumpf, axis=1)
 fpr_and_tprsStumpf = np.concatenate((refFprStumpf, tprsStumpf), axis=1)
 
 np.save(filename_roc_curve_info+'/'+configfilename.split('_')[0]+'_Stumpf.npy', fpr_and_tprsStumpf)
+
+refFprShehhi = np.expand_dims(refFprShehhi, axis=1)
+fpr_and_tprsShehhi = np.concatenate((refFprShehhi, tprsShehhi), axis=1)
+
+np.save(filename_roc_curve_info+'/'+configfilename.split('_')[0]+'_Shehhi.npy', fpr_and_tprsShehhi)
 
 fpr_and_tprsSoto = np.zeros(2)
 fpr_and_tprsSoto[0] = np.mean(fprsSoto)
