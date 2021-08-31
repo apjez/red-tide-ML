@@ -1,4 +1,5 @@
 import pandas as pd
+import sys
 from scipy import stats
 import numpy as np
 import matplotlib.pyplot as plt
@@ -18,7 +19,9 @@ import json
 from configparser import ConfigParser
 import matplotlib.pyplot as plt
 
-configfilename = 'date_train_test_position_norm'
+np.set_printoptions(threshold=sys.maxsize)
+
+configfilename = 'date_train_test_depth_norm_w_nn'
 
 config = ConfigParser()
 config.read('configfiles/'+configfilename+'.ini')
@@ -102,6 +105,13 @@ if(use_nn_feature == 1 or use_nn_feature == 2):
 			class_inds = np.where(df_concs >= 100000)[0]
 		reducedInds = np.append(reducedInds, class_inds[np.random.choice(class_inds.shape[0], pointsPerClass)])
 
+
+
+	##### Don't balance data by classes
+	reducedInds = np.array(range(len(df_concs)))
+
+
+
 	reducedInds = reducedInds.astype(int)
 	df_dates = df_dates[reducedInds]
 	df_dates = df_dates.reset_index()
@@ -168,6 +178,13 @@ for model_number in range(len(randomseeds)):
 		class_inds = np.where(classes == i)[0]
 		reducedInds = np.append(reducedInds, class_inds[np.random.choice(class_inds.shape[0], pointsPerClass)])
 
+
+
+	##### Don't balance data by classes
+	reducedInds = np.array(range(len(classes)))
+
+
+
 	reducedInds = reducedInds.astype(int)
 
 	usedClasses = classes[reducedInds]
@@ -179,12 +196,18 @@ for model_number in range(len(randomseeds)):
 	usedDates = dates[reducedInds]
 	usedLatitudes = latitudes[reducedInds]
 
+	years_in_data = [2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,\
+					 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019]
+
 	if(traintest_split == 0):
 		trainInds = sample(range(reducedFeaturesTensor.shape[0]), int(0.8*reducedFeaturesTensor.shape[0]))
 		testInds = list(set(range(reducedFeaturesTensor.shape[0]))-set(trainInds))
 	elif(traintest_split == 1):
-		trainInds = np.where(usedDates < np.datetime64('2018-01-01'))[0]
-		testInds = np.where(usedDates >= np.datetime64('2018-01-01'))[0]
+		#Select the years to test on
+		years_to_test = np.random.choice(years_in_data, size=2, replace=False)
+
+		trainInds = np.logical_and(np.logical_or(usedDates < np.datetime64(str(years_to_test[0])+'-01-01'), usedDates >= np.datetime64(str(years_to_test[0]+1)+'-01-01')), np.logical_or(usedDates < np.datetime64(str(years_to_test[1])+'-01-01'), usedDates >= np.datetime64(str(years_to_test[1]+1)+'-01-01')))
+		testInds = np.logical_or(np.logical_and(usedDates >= np.datetime64(str(years_to_test[0])+'-01-01'), usedDates < np.datetime64(str(years_to_test[0]+1)+'-01-01')), np.logical_and(usedDates >= np.datetime64(str(years_to_test[1])+'-01-01'), usedDates < np.datetime64(str(years_to_test[1]+1)+'-01-01')))
 	elif(traintest_split == 2):
 		trainInds = np.logical_or(usedLatitudes >= 27, usedLatitudes < 26.5)
 		testInds = np.logical_and(usedLatitudes < 27, usedLatitudes >= 26.5)

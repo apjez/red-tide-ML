@@ -7,6 +7,7 @@ import torch
 import netCDF4
 import json
 import matplotlib.pyplot as plt
+import datetime as dt
 from configparser import ConfigParser
 from convertFeaturesByDepth import *
 from findMatrixCoordsBedrock import *
@@ -104,7 +105,18 @@ bedrock_x = np.load('florida_x.npy')
 bedrock_y = np.load('florida_y.npy')
 bedrock_z = np.load('florida_z.npy')
 
+#Reduce data to only SouthWest Florida
 original_size = features.shape
+florida_lats = np.reshape(florida_lats, (features.shape[0], features.shape[1]), order='C')
+florida_lons = np.reshape(florida_lons, (features.shape[0], features.shape[1]), order='C')
+florida_lats = florida_lats[520:780, 300:580]
+florida_lons = florida_lons[520:780, 300:580]
+florida_lats = np.reshape(florida_lats, (florida_lats.shape[0]*florida_lats.shape[1]))
+florida_lons = np.reshape(florida_lons, (florida_lons.shape[0]*florida_lons.shape[1]))
+features = features[520:780, 300:580, :]
+original_size = features.shape
+
+
 features = np.reshape(features, (features.shape[0]*features.shape[1], 7))
 
 orig_indices_bedrock = findMatrixCoordsBedrock(bedrock_y, bedrock_x, florida_lats, florida_lons)
@@ -120,7 +132,7 @@ features = convertFeaturesByDepth(features, features_to_use)
 featureTensor = torch.tensor(features).float().cuda()
 features = np.reshape(features, (original_size[0], original_size[1], 6), order='C')
 
-configfilename = 'date_train_test_depth_norm'
+configfilename = 'date_train_test_depth_norm_w_knn'
 
 config = ConfigParser()
 config.read('configfiles/'+configfilename+'.ini')
@@ -133,6 +145,52 @@ randomseeds = json.loads(config.get('main', 'randomseeds'))
 normalization = config.getint('main', 'normalization')
 traintest_split = config.getint('main', 'traintest_split')
 use_nn_feature = config.getint('main', 'use_nn_feature')
+
+# 0 = No nn features, 1 = nn, 2 = weighted knn
+if(use_nn_feature == 1 or use_nn_feature == 2):
+	file_path = 'PinellasMonroeCoKareniabrevis 2010-2020.06.12.xlsx'
+
+	df = pd.read_excel(file_path, engine='openpyxl')
+	df_dates = df['Sample Date']
+	df_lats = df['Latitude'].to_numpy()
+	df_lons = df['Longitude'].to_numpy()
+	df_concs = df['Karenia brevis abundance (cells/L)'].to_numpy()
+
+	df_concs_log = np.log10(df_concs)/np.max(np.log10(df_concs))
+	df_concs_log[np.isinf(df_concs_log)] = 0
+
+	knn_features = np.zeros((featureTensor.shape[0], 1))
+
+	searchdate = testDate
+	weekbefore = searchdate - dt.timedelta(days=3)
+	twoweeksbefore = searchdate - dt.timedelta(days=10)
+	mask = (df_dates > twoweeksbefore) & (df_dates <= weekbefore)
+	week_prior_inds = df_dates[mask].index.values
+
+	beta = 1
+
+	if(week_prior_inds.size):
+		#Do some nearest neighbor thing with the last week's samples
+		for i in range(len(knn_features)):
+			physicalDistance = 100*np.sqrt((df_lats[week_prior_inds]-florida_lats[i])**2 + (df_lons[week_prior_inds]-florida_lons[i])**2)
+			daysBack = (searchdate - df_dates[week_prior_inds]).astype('timedelta64[D]').values
+			totalDistance = physicalDistance + beta*daysBack
+			inverseDistance = 1/totalDistance
+			NN_weights = inverseDistance/np.sum(inverseDistance)
+
+			knn_features[i] = np.sum(NN_weights*df_concs_log[week_prior_inds])
+
+	knn_features_map = np.reshape(knn_features, (original_size[0], original_size[1]), order='C')
+
+	plt.figure(dpi=500)
+	plt.imshow(knn_features_map.T)
+	plt.colorbar()
+	plt.title('Red Tide Prediction {}/{}/{}'.format(testDate.month, testDate.day, testDate.year))
+	plt.gca().invert_yaxis()
+	plt.savefig('red_tide_knn{}_{}_{}.png'.format(testDate.month, testDate.day, testDate.year), bbox_inches='tight')
+
+	featureTensor = torch.cat((featureTensor, torch.tensor(knn_features).float().cuda()), dim=1)
+
 
 red_tide_output_sum = np.zeros((original_size[0], original_size[1]))
 
@@ -153,8 +211,8 @@ for model_number in range(len(randomseeds)):
 red_tide_output = red_tide_output_sum/len(randomseeds)
 
 plt.figure(dpi=500)
-plt.imshow(red_tide_output[520:780, 300:580].T)
+plt.imshow(red_tide_output.T)
 plt.colorbar()
 plt.title('Red Tide Prediction {}/{}/{}'.format(testDate.month, testDate.day, testDate.year))
 plt.gca().invert_yaxis()
-plt.savefig('red_tide{}_{}_{}.png'.format(testDate.month, testDate.day, testDate.year))
+plt.savefig('red_tide_combined{}_{}_{}.png'.format(testDate.month, testDate.day, testDate.year), bbox_inches='tight')

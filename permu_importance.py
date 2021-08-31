@@ -24,7 +24,7 @@ import json
 from configparser import ConfigParser
 import matplotlib.pyplot as plt
 
-configfilename = 'random_train_test_no_norm'
+configfilename = 'date_train_test_depth_norm_w_nn'
 
 config = ConfigParser()
 config.read('configfiles/'+configfilename+'.ini')
@@ -65,6 +65,13 @@ for i in range(num_classes):
 	else:
 		class_inds = np.where(df_concs >= 100000)[0]
 	reducedInds = np.append(reducedInds, class_inds[np.random.choice(class_inds.shape[0], pointsPerClass)])
+
+
+
+##### Don't balance data by classes
+reducedInds = np.array(range(len(df_concs)))
+
+
 
 reducedInds = reducedInds.astype(int)
 df_dates = df_dates[reducedInds]

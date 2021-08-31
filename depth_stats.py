@@ -15,6 +15,7 @@ florida_z = np.load('florida_z.npy')
 
 data_folder = '/run/media/rfick/UF10/MODIS-OC/MODIS-OC-data/requested_files'
 data_list = os.listdir(data_folder)
+save_folder = 'depth_stats'
 
 angstrom_sums = {}
 chlor_a_sums = {}
@@ -133,9 +134,9 @@ for i in range(len(data_list)):
 					nflh_sums['{}_x'.format(depth)] += reducedNflh[j]
 					nflh_sums['{}_x2'.format(depth)] += reducedNflh[j]*reducedNflh[j]
 
-np.save('angstrom_sums.npy', angstrom_sums)
-np.save('chlor_a_sums.npy', chlor_a_sums)
-np.save('chl_ocx_sums.npy', chl_ocx_sums)
-np.save('Kd_490_sums.npy', Kd_490_sums)
-np.save('poc_sums.npy', poc_sums)
-np.save('nflh_sums.npy', nflh_sums)
+np.save(save_folder+'/angstrom_sums.npy', angstrom_sums)
+np.save(save_folder+'/chlor_a_sums.npy', chlor_a_sums)
+np.save(save_folder+'/chl_ocx_sums.npy', chl_ocx_sums)
+np.save(save_folder+'/Kd_490_sums.npy', Kd_490_sums)
+np.save(save_folder+'/poc_sums.npy', poc_sums)
+np.save(save_folder+'/nflh_sums.npy', nflh_sums)
