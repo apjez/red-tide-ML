@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 
 np.set_printoptions(threshold=sys.maxsize)
 
-configfilename = 'date_train_test_depth_norm_w_nn'
+configfilename = 'date_train_test_no_norm_allfeatures_balanced'
 
 config = ConfigParser()
 config.read('configfiles/'+configfilename+'.ini')
@@ -34,6 +34,7 @@ randomseeds = json.loads(config.get('main', 'randomseeds'))
 normalization = config.getint('main', 'normalization')
 traintest_split = config.getint('main', 'traintest_split')
 use_nn_feature = config.getint('main', 'use_nn_feature')
+balance_train = config.getint('main', 'balance_train')
 
 loss = nn.BCELoss()
 
@@ -42,6 +43,7 @@ paired_df = pd.read_pickle('paired_dataset.pkl')
 #features_to_use=['Sample Date', 'Latitude', 'aot_869', 'angstrom', 'Rrs_412', 'Rrs_443', 'Rrs_469', 'Rrs_488',\
 #	'Rrs_531', 'Rrs_547', 'Rrs_555', 'Rrs_645',\
 #	'Rrs_667', 'Rrs_678', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'par', 'ipar', 'nflh', 'Red Tide Concentration']
+#features_to_use=['Sample Date', 'Latitude', 'Longitude', 'aot_869', 'par', 'ipar', 'angstrom', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'nflh', 'bedrock', 'Red Tide Concentration', 'Rrs_443', 'Rrs_555']
 features_to_use=['Sample Date', 'Latitude', 'Longitude', 'angstrom', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'nflh', 'bedrock', 'Red Tide Concentration', 'Rrs_443', 'Rrs_555']
 
 paired_df = paired_df[features_to_use]
@@ -106,9 +108,9 @@ if(use_nn_feature == 1 or use_nn_feature == 2):
 		reducedInds = np.append(reducedInds, class_inds[np.random.choice(class_inds.shape[0], pointsPerClass)])
 
 
-
-	##### Don't balance data by classes
-	reducedInds = np.array(range(len(df_concs)))
+	if(balance_train == 0):
+		##### Don't balance data by classes
+		reducedInds = np.array(range(len(df_concs)))
 
 
 
@@ -179,9 +181,9 @@ for model_number in range(len(randomseeds)):
 		reducedInds = np.append(reducedInds, class_inds[np.random.choice(class_inds.shape[0], pointsPerClass)])
 
 
-
-	##### Don't balance data by classes
-	reducedInds = np.array(range(len(classes)))
+	if(balance_train == 0):
+		##### Don't balance data by classes
+		reducedInds = np.array(range(len(classes)))
 
 
 

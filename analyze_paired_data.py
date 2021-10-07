@@ -16,6 +16,11 @@ corrs = []
 for i in range(len(columns_to_compare)):
 	feature = paired_df[columns_to_compare[i]].to_numpy().copy()
 	inds = np.argwhere(~np.isnan(feature))
+	print('{} {}'.format(columns_to_compare[i], len(inds)))
+
+for i in range(len(columns_to_compare)):
+	feature = paired_df[columns_to_compare[i]].to_numpy().copy()
+	inds = np.argwhere(~np.isnan(feature))
 	feature_clean = np.squeeze(feature[inds].copy())
 	red_tide_clean = np.squeeze(red_tide[inds].copy())
 	corr, _ = stats.pearsonr(feature_clean, red_tide_clean)

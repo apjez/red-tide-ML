@@ -18,13 +18,14 @@ from detectors.AminEtAlDetector import *
 from detectors.StumpfEtAlDetector import *
 from detectors.CannizzaroEtAlDetector import *
 from detectors.ShehhiEtAlDetector import *
+from detectors.SS488Detector import *
 from torch.utils.data import DataLoader, Dataset
 from sklearn.metrics import accuracy_score, confusion_matrix, roc_curve
 import json
 from configparser import ConfigParser
 import matplotlib.pyplot as plt
 
-configfilename = 'date_train_test_depth_norm_w_nn'
+configfilename = 'date_train_test_depth_norm_w_knn'
 
 config = ConfigParser()
 config.read('configfiles/'+configfilename+'.ini')
@@ -37,6 +38,7 @@ randomseeds = json.loads(config.get('main', 'randomseeds'))
 normalization = config.getint('main', 'normalization')
 traintest_split = config.getint('main', 'traintest_split')
 use_nn_feature = config.getint('main', 'use_nn_feature')
+balance_train = config.getint('main', 'balance_train')
 
 file_path = 'PinellasMonroeCoKareniabrevis 2010-2020.06.12.xlsx'
 
@@ -67,9 +69,9 @@ for i in range(num_classes):
 	reducedInds = np.append(reducedInds, class_inds[np.random.choice(class_inds.shape[0], pointsPerClass)])
 
 
-
-##### Don't balance data by classes
-reducedInds = np.array(range(len(df_concs)))
+if(balance_train == 0):
+	##### Don't balance data by classes
+	reducedInds = np.array(range(len(df_concs)))
 
 
 
@@ -88,7 +90,8 @@ paired_df = pd.read_pickle('paired_dataset.pkl')
 #features_to_use=['Sample Date', 'Latitude', 'aot_869', 'angstrom', 'Rrs_412', 'Rrs_443', 'Rrs_469', 'Rrs_488',\
 #	'Rrs_531', 'Rrs_547', 'Rrs_555', 'Rrs_645',\
 #	'Rrs_667', 'Rrs_678', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'par', 'ipar', 'nflh', 'Red Tide Concentration']
-features_to_use=['Sample Date', 'Latitude', 'Longitude', 'angstrom', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'nflh', 'bedrock', 'Red Tide Concentration', 'Rrs_443', 'Rrs_555', 'Rrs_667', 'Rrs_678']
+#features_to_use=['Sample Date', 'Latitude', 'Longitude', 'aot_869', 'par', 'ipar', 'angstrom', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'nflh', 'bedrock', 'Red Tide Concentration', 'Rrs_443', 'Rrs_555', 'Rrs_667', 'Rrs_678']
+features_to_use=['Sample Date', 'Latitude', 'Longitude', 'angstrom', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'nflh', 'bedrock', 'Red Tide Concentration', 'Rrs_443', 'Rrs_555', 'Rrs_667', 'Rrs_678', 'Rrs_469', 'Rrs_488', 'Rrs_531']
 
 paired_df = paired_df[features_to_use]
 
@@ -106,18 +109,19 @@ features_lin_lee = paired_df[['chl_ocx', 'nflh', 'Rrs_443', 'Rrs_555']].to_numpy
 features_amin = paired_df[['Rrs_667', 'Rrs_678']].to_numpy().copy()
 features_stumpf = paired_df[['chlor_a']].to_numpy().copy()
 features_shehhi = paired_df[['nflh']].to_numpy().copy()
+features_SS488 = paired_df[['Rrs_469', 'Rrs_488', 'Rrs_531']].to_numpy().copy()
 #features_cannizzaro = paired_df[['chl_ocx', 'Rrs_443', 'Rrs_555']].to_numpy().copy()
 
-features = paired_df[features_to_use[1:-5]]
-features_used = features_to_use[3:-6]
+features = paired_df[features_to_use[1:-8]]
+features_used = features_to_use[3:-9]
 
 features = np.array(features.values)
 if(normalization == 0):
 	features = features[:, 2:-1]
 elif(normalization == 1):
-	features = convertFeaturesByDepth(features[:, 2:], features_to_use[3:-6])
+	features = convertFeaturesByDepth(features[:, 2:], features_to_use[3:-9])
 elif(normalization == 2):
-	features = convertFeaturesByPosition(features[:, :-1], features_to_use[3:-6])
+	features = convertFeaturesByPosition(features[:, :-1], features_to_use[3:-9])
 
 if(use_nn_feature == 1):
 	nn_classes = np.load('saved_model_info/'+configfilename+'/nn_classes.npy')
@@ -157,6 +161,8 @@ refFprStumpf = []
 tprsStumpf = []
 refFprShehhi = []
 tprsShehhi = []
+refFprSS488 = []
+tprsSS488 = []
 #fprsCannizzaro = []
 #tprsCannizzaro = []
 
@@ -175,6 +181,7 @@ for model_number in range(len(randomseeds)):
 	reducedFeaturesAmin = features_amin[reducedInds, :]
 	reducedFeaturesStumpf = features_stumpf[reducedInds, :]
 	reducedFeaturesShehhi = features_shehhi[reducedInds, :]
+	reducedFeaturesSS488 = features_SS488[reducedInds, :]
 	#reducedFeaturesCannizzaro = features_cannizzaro[reducedInds, :]
 
 	reducedDates = dates[reducedInds]
@@ -193,12 +200,14 @@ for model_number in range(len(randomseeds)):
 	testSetAmin = reducedFeaturesAmin[testInds, :].astype(float)
 	testSetStumpf = reducedFeaturesStumpf[testInds, :].astype(float)
 	testSetShehhi = reducedFeaturesShehhi[testInds, :].astype(float)
+	testSetSS488 = reducedFeaturesSS488[testInds, :].astype(float)
 	#testSetCannizzaro = reducedFeaturesCannizzaro[testInds, :].astype(float)
 
 	outputLinLee = SotoEtAlDetector(testSetLinLee)
 	outputAmin = AminEtAlDetector(testSetAmin)
 	outputStumpf = StumpfEtAlDetector(testSetStumpf)
 	outputShehhi = ShehhiEtAlDetector(testSetShehhi)
+	outputSS488 = SS488Detector(testSetSS488)
 	#outputCannizzaro = CannizzaroEtAlDetector(testSetCannizzaro)
 
 	testClasses = usedClasses[testInds]
@@ -369,6 +378,16 @@ for model_number in range(len(randomseeds)):
 		refTprShehhi = np.expand_dims(refTprShehhi, axis=1)
 		tprsShehhi = np.concatenate((tprsShehhi, refTprShehhi), axis=1)
 
+	fpr, tpr, thresholds = roc_curve(testClasses, outputSS488)
+	if(model_number == 0):
+		refFprSS488 = fpr
+		tprsSS488 = tpr
+		tprsSS488 = np.expand_dims(tprsSS488, axis=1)
+	else:
+		refTprSS488 = convertROC(fpr, tpr, refFprSS488)
+		refTprSS488 = np.expand_dims(refTprSS488, axis=1)
+		tprsSS488 = np.concatenate((tprsSS488, refTprSS488), axis=1)
+
 	feature_permu = np.random.permutation(testSet.shape[0])
 	for i in range(testSet.shape[1]):
 		# permute feature i
@@ -425,6 +444,11 @@ refFprShehhi = np.expand_dims(refFprShehhi, axis=1)
 fpr_and_tprsShehhi = np.concatenate((refFprShehhi, tprsShehhi), axis=1)
 
 np.save(filename_roc_curve_info+'/'+configfilename.split('_')[0]+'_Shehhi.npy', fpr_and_tprsShehhi)
+
+refFprSS488 = np.expand_dims(refFprSS488, axis=1)
+fpr_and_tprsSS488 = np.concatenate((refFprSS488, tprsSS488), axis=1)
+
+np.save(filename_roc_curve_info+'/'+configfilename.split('_')[0]+'_SS488.npy', fpr_and_tprsSS488)
 
 fpr_and_tprsSoto = np.zeros(2)
 fpr_and_tprsSoto[0] = np.mean(fprsSoto)
