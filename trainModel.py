@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import time
 from random import sample
 from model import *
 from dataset import *
@@ -21,7 +22,7 @@ import matplotlib.pyplot as plt
 
 np.set_printoptions(threshold=sys.maxsize)
 
-configfilename = 'date_train_test_no_norm_allfeatures_balanced'
+configfilename = 'date_train_test_depth_norm_w_knn_2000_2012'
 
 config = ConfigParser()
 config.read('configfiles/'+configfilename+'.ini')
@@ -78,7 +79,7 @@ for i in range(len(classes)):
 beta = 1
 
 # 0 = No nn features, 1 = nn, 2 = weighted knn
-if(use_nn_feature == 1 or use_nn_feature == 2):
+if(use_nn_feature == 1 or use_nn_feature == 2 or use_nn_feature == 3):
 	file_path = 'PinellasMonroeCoKareniabrevis 2010-2020.06.12.xlsx'
 
 	df = pd.read_excel(file_path, engine='openpyxl')
@@ -126,6 +127,7 @@ if(use_nn_feature == 1 or use_nn_feature == 2):
 	dataDates = pd.DatetimeIndex(dates)
 	nn_classes = np.zeros((features.shape[0]))
 	knn_concs = np.zeros((features.shape[0]))
+	nearest_sample_dist = np.zeros((features.shape[0]))
 	#Do some nearest neighbor thing with the last week's samples
 	for i in range(len(dataDates)):
 		searchdate = dataDates[i]
@@ -145,6 +147,7 @@ if(use_nn_feature == 1 or use_nn_feature == 2):
 
 			closestConc = df_concs[week_prior_inds][idx]
 			knn_concs[i] = np.sum(NN_weights*df_concs_log[week_prior_inds])
+			nearest_sample_dist[i] = np.min(physicalDistance)
 			if(closestConc < 100000):
 				nn_classes[i] = 0
 			else:
@@ -155,17 +158,27 @@ if(use_nn_feature == 1 or use_nn_feature == 2):
 	if(use_nn_feature == 1):
 		ensure_folder('saved_model_info/'+configfilename)
 		np.save('saved_model_info/'+configfilename+'/nn_classes.npy', nn_classes)
+		original_features = np.copy(features)
 		features = np.concatenate((features, np.expand_dims(nn_classes, axis=1)), axis=1)
 	if(use_nn_feature == 2):
 		ensure_folder('saved_model_info/'+configfilename)
 		np.save('saved_model_info/'+configfilename+'/knn_concs.npy', knn_concs)
+		original_features = np.copy(features)
 		features = np.concatenate((features, np.expand_dims(knn_concs, axis=1)), axis=1)
+	if(use_nn_feature == 3):
+		ensure_folder('saved_model_info/'+configfilename)
+		np.save('saved_model_info/'+configfilename+'/knn_concs.npy', knn_concs)
+		original_features = np.copy(features)
+		features = np.concatenate((features, np.expand_dims(knn_concs, axis=1)), axis=1)
+		np.save('saved_model_info/'+configfilename+'/nearest_sample_dist.npy', nearest_sample_dist)
 
 
 
 
 
 for model_number in range(len(randomseeds)):
+	starttime = time.time()
+
 	# Set up random seeds for reproducability
 	torch.manual_seed(randomseeds[model_number])
 	np.random.seed(randomseeds[model_number])
@@ -191,15 +204,19 @@ for model_number in range(len(randomseeds)):
 
 	usedClasses = classes[reducedInds]
 
+	original_featuresTensor = torch.tensor(original_features)
 	featuresTensor = torch.tensor(features)
 
+	reducedOriginalFeaturesTensor = original_featuresTensor[reducedInds, :]
 	reducedFeaturesTensor = featuresTensor[reducedInds, :]
 
 	usedDates = dates[reducedInds]
 	usedLatitudes = latitudes[reducedInds]
 
+	#years_in_data = [2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,\
+	#				 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019]
 	years_in_data = [2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,\
-					 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019]
+					 2010, 2011, 2012]
 
 	if(traintest_split == 0):
 		trainInds = sample(range(reducedFeaturesTensor.shape[0]), int(0.8*reducedFeaturesTensor.shape[0]))
@@ -214,6 +231,8 @@ for model_number in range(len(randomseeds)):
 		trainInds = np.logical_or(usedLatitudes >= 27, usedLatitudes < 26.5)
 		testInds = np.logical_and(usedLatitudes < 27, usedLatitudes >= 26.5)
 
+	originalTrainSet = reducedOriginalFeaturesTensor[trainInds, :].float().cuda()
+	originalTestSet = reducedOriginalFeaturesTensor[testInds, :].float().cuda()
 	trainSet = reducedFeaturesTensor[trainInds, :].float().cuda()
 	testSet = reducedFeaturesTensor[testInds, :].float().cuda()
 
@@ -236,15 +255,27 @@ for model_number in range(len(randomseeds)):
 	trainTargets = torch.Tensor(trainTargets).float().cuda()
 	testTargets = torch.Tensor(testTargets).float().cuda()
 
+	originalTrainDataset = RedTideDataset(originalTrainSet, trainTargets)
+	originalTrainDataloader = DataLoader(originalTrainDataset, batch_size=mb_size, shuffle=True)
 	trainDataset = RedTideDataset(trainSet, trainTargets)
 	trainDataloader = DataLoader(trainDataset, batch_size=mb_size, shuffle=True)
 
+	if(use_nn_feature == 3):
+		originalPredictor = Predictor(originalTrainSet.shape[1], num_classes).cuda()
+		originalOptimizer = optim.Adam(originalPredictor.parameters(), lr=learning_rate)
 	predictor = Predictor(trainSet.shape[1], num_classes).cuda()
 	optimizer = optim.Adam(predictor.parameters(), lr=learning_rate)
 
 	losses = np.zeros((numEpochs, 1))
 
 	for i in range(numEpochs):
+		if(use_nn_feature == 3):
+			for mini_batch_data, mini_batch_labels in originalTrainDataloader:
+				originalOptimizer.zero_grad()
+				output = originalPredictor(mini_batch_data)
+				miniBatchLoss = loss(output, mini_batch_labels)
+				miniBatchLoss.backward()
+				originalOptimizer.step()
 		epochLoss = 0
 		for mini_batch_data, mini_batch_labels in trainDataloader:
 			optimizer.zero_grad()
@@ -267,6 +298,12 @@ for model_number in range(len(randomseeds)):
 
 	ensure_folder('saved_model_info/'+configfilename)
 
+	if(use_nn_feature == 3):
+		torch.save(originalPredictor.state_dict(), 'saved_model_info/'+configfilename+'/originalPredictor{}.pt'.format(model_number))
 	torch.save(predictor.state_dict(), 'saved_model_info/'+configfilename+'/predictor{}.pt'.format(model_number))
 	np.save('saved_model_info/'+configfilename+'/reducedInds{}.npy'.format(model_number), reducedInds)
 	np.save('saved_model_info/'+configfilename+'/testInds{}.npy'.format(model_number), testInds)
+
+	endtime = time.time()
+
+	print('Model training time: {}'.format(endtime-starttime))

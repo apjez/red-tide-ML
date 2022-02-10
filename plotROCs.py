@@ -5,7 +5,7 @@ from cycler import cycler
 from os import listdir
 from os.path import isfile, join
 
-filename_roc_curve_info = 'roc_curve_info'
+filename_roc_curve_info = 'roc_curve_info_hycom'
 save_folder = 'roc_curve_plots'
 
 files = [f for f in listdir(filename_roc_curve_info) if isfile(join(filename_roc_curve_info, f))]

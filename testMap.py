@@ -8,6 +8,7 @@ import netCDF4
 import json
 import matplotlib.pyplot as plt
 import datetime as dt
+import time
 from configparser import ConfigParser
 from convertFeaturesByDepth import *
 from findMatrixCoordsBedrock import *
@@ -105,7 +106,7 @@ bedrock_x = np.load('florida_x.npy')
 bedrock_y = np.load('florida_y.npy')
 bedrock_z = np.load('florida_z.npy')
 
-#Reduce data to only SouthWest Florida
+#Reduce data to only Southwest Florida
 original_size = features.shape
 florida_lats = np.reshape(florida_lats, (features.shape[0], features.shape[1]), order='C')
 florida_lons = np.reshape(florida_lons, (features.shape[0], features.shape[1]), order='C')
@@ -182,6 +183,8 @@ if(use_nn_feature == 1 or use_nn_feature == 2):
 
 	knn_features_map = np.reshape(knn_features, (original_size[0], original_size[1]), order='C')
 
+	knn_features_map[land_mask] = -1
+
 	plt.figure(dpi=500)
 	plt.imshow(knn_features_map.T)
 	plt.colorbar()
@@ -189,8 +192,53 @@ if(use_nn_feature == 1 or use_nn_feature == 2):
 	plt.gca().invert_yaxis()
 	plt.savefig('red_tide_knn{}_{}_{}.png'.format(testDate.month, testDate.day, testDate.year), bbox_inches='tight')
 
-	featureTensor = torch.cat((featureTensor, torch.tensor(knn_features).float().cuda()), dim=1)
+	knn_features_map.fill(0)
+	knn_features_map[land_mask] = -1
 
+	knn_features_map = knn_features_map[125:160, 120:150]
+
+	plt.figure(dpi=500)
+	plt.imshow(knn_features_map.T)
+	plt.clim(-1, 1)
+	plt.title('Red Tide KNN {}/{}/{}'.format(testDate.month, testDate.day, testDate.year))
+	plt.gca().invert_yaxis()
+	fig = plt.gcf()
+	ax = fig.gca()
+
+	florida_lats = np.reshape(florida_lats, (features.shape[0], features.shape[1]), order='C')
+	florida_lons = np.reshape(florida_lons, (features.shape[0], features.shape[1]), order='C')
+	florida_lats = florida_lats[125:160, 120:150]
+	florida_lons = florida_lons[125:160, 120:150]
+	florida_lats = florida_lats[0, :]
+	florida_lons = florida_lons[:, 0]
+
+	for i in range(week_prior_inds.size):
+		lat_ind = find_nearest(florida_lats, df_lats[week_prior_inds[i]])
+		lon_ind = find_nearest(florida_lons, df_lons[week_prior_inds[i]])
+		if(min(florida_lats) < df_lats[week_prior_inds[i]] and max(florida_lats) > df_lats[week_prior_inds[i]] \
+		   and min(florida_lons) < df_lons[week_prior_inds[i]] and max(florida_lons) > df_lons[week_prior_inds[i]]):
+			daysback = (testDate - df_dates[week_prior_inds[i]]).days
+			opacity = ((7-daysback)+1)/8
+			if(df_concs[week_prior_inds[i]] < 1000):
+				color = (0.5, 0.5, 0.5, opacity)
+			elif(df_concs[week_prior_inds[i]] > 1000 and df_concs[week_prior_inds[i]] < 10000):
+				color = (1, 1, 1, opacity)
+			elif(df_concs[week_prior_inds[i]] > 10000 and df_concs[week_prior_inds[i]] < 100000):
+				color = (1, 1, 0, opacity)
+			elif(df_concs[week_prior_inds[i]] > 100000 and df_concs[week_prior_inds[i]] < 1000000):
+				color = (1, 0.65, 0, opacity)
+			else:
+				color = (1, 0, 0, opacity)
+
+			radius = 1
+			circle = plt.Circle((lon_ind, lat_ind), radius, color=color)
+			ax.add_patch(circle)
+	rectangle = plt.Rectangle((24, 4), 2, 2, color=(0.5, 0.5, 0.5, 1))
+	ax.add_patch(rectangle)
+
+	plt.savefig('red_tide_knn2{}_{}_{}.png'.format(testDate.month, testDate.day, testDate.year), bbox_inches='tight')
+
+	featureTensor = torch.cat((featureTensor, torch.tensor(knn_features).float().cuda()), dim=1)
 
 red_tide_output_sum = np.zeros((original_size[0], original_size[1]))
 
