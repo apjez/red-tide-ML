@@ -4,7 +4,7 @@ import math
 import matplotlib.pyplot as plt
 
 load_folder = 'depth_stats'
-filenames = ['angstrom_sums.npy', 'chlor_a_sums.npy', 'chl_ocx_sums.npy', 'Kd_490_sums.npy', 'poc_sums.npy', 'nflh_sums.npy']
+filenames = ['angstrom_sums.npy', 'chlor_a_sums.npy', 'chl_ocx_sums.npy', 'Kd_490_sums.npy', 'poc_sums.npy', 'nflh_sums.npy', 'par_sums.npy', 'Rrs_443_sums.npy', 'Rrs_469_sums.npy', 'Rrs_488_sums.npy']
 
 for filename in filenames:
 	sums = np.load(load_folder+'/'+filename, allow_pickle='TRUE').item()

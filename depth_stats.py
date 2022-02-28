@@ -5,6 +5,7 @@ import xarray as xr
 import time
 import matplotlib.pyplot as plt
 from findMatrixCoordsBedrock import *
+from MODIS_valid_range import *
 
 def maskPoints(A_x, A_y, B_x, B_y, X, Y):
 	return (B_x - A_x)*(Y - A_y) - (B_y - A_y)*(X - A_x)
@@ -23,6 +24,10 @@ chl_ocx_sums = {}
 Kd_490_sums = {}
 poc_sums = {}
 nflh_sums = {}
+par_sums = {}
+Rrs_443_sums = {}
+Rrs_469_sums = {}
+Rrs_488_sums = {}
 
 for i in range(len(data_list)):
 	file_id = data_list[i]
@@ -50,11 +55,9 @@ for i in range(len(data_list)):
 	collectionTimeStamp = pd.Timestamp(int(collectionDate[0:4]), int(collectionDate[5:7]), int(collectionDate[8:10]), 0)
 
 	if(i % 100 == 0):
-		print('Processing file #{}'.format(i))
+		print('Processing file #{}/{}'.format(i, len(data_list)))
 
-	start = time.time()
 	orig_indices = findMatrixCoordsBedrock(florida_y, florida_x, reducedLatArr, reducedLongArr)
-	end = time.time()
 
 	dataset = xr.open_dataset(file_path, 'geophysical_data')
 	angstrom = dataset['angstrom']
@@ -76,10 +79,23 @@ for i in range(len(data_list)):
 	nflh = np.array(nflh).flatten()
 	reducedNflh = nflh[inds]
 
+	par = dataset['par']
+	par = np.array(par).flatten()
+	reducedPar = par[inds]
+	Rrs_443 = dataset['Rrs_443']
+	Rrs_443 = np.array(Rrs_443).flatten()
+	reducedRrs_443 = Rrs_443[inds]
+	Rrs_469 = dataset['Rrs_469']
+	Rrs_469 = np.array(Rrs_469).flatten()
+	reducedRrs_469 = Rrs_469[inds]
+	Rrs_488 = dataset['Rrs_488']
+	Rrs_488 = np.array(Rrs_488).flatten()
+	reducedRrs_488 = Rrs_488[inds]
+
 	for j in range(len(orig_indices)):
 		if(orig_indices[j][0] != -1 and orig_indices[j][1] != -1):
 			depth = florida_z[orig_indices[j][0]][orig_indices[j][0]]
-			if(~np.isnan(reducedAngstrom[j])):
+			if(~np.isnan(reducedAngstrom[j]) and MODIS_valid_range(reducedAngstrom[j], 'angstrom')):
 				if('{}_n'.format(depth) not in angstrom_sums):
 					angstrom_sums['{}_n'.format(depth)] = 1
 					angstrom_sums['{}_x'.format(depth)] = reducedAngstrom[j]
@@ -88,7 +104,7 @@ for i in range(len(data_list)):
 					angstrom_sums['{}_n'.format(depth)] += 1
 					angstrom_sums['{}_x'.format(depth)] += reducedAngstrom[j]
 					angstrom_sums['{}_x2'.format(depth)] += reducedAngstrom[j]*reducedAngstrom[j]
-			if(~np.isnan(reducedChlorA[j])):
+			if(~np.isnan(reducedChlorA[j]) and MODIS_valid_range(reducedChlorA[j], 'chlor_a')):
 				if('{}_n'.format(depth) not in chlor_a_sums):
 					chlor_a_sums['{}_n'.format(depth)] = 1
 					chlor_a_sums['{}_x'.format(depth)] = reducedChlorA[j]
@@ -97,7 +113,7 @@ for i in range(len(data_list)):
 					chlor_a_sums['{}_n'.format(depth)] += 1
 					chlor_a_sums['{}_x'.format(depth)] += reducedChlorA[j]
 					chlor_a_sums['{}_x2'.format(depth)] += reducedChlorA[j]*reducedChlorA[j]
-			if(~np.isnan(reducedChlOcx[j])):
+			if(~np.isnan(reducedChlOcx[j]) and MODIS_valid_range(reducedChlOcx[j], 'chl_ocx')):
 				if('{}_n'.format(depth) not in chl_ocx_sums):
 					chl_ocx_sums['{}_n'.format(depth)] = 1
 					chl_ocx_sums['{}_x'.format(depth)] = reducedChlOcx[j]
@@ -106,7 +122,7 @@ for i in range(len(data_list)):
 					chl_ocx_sums['{}_n'.format(depth)] += 1
 					chl_ocx_sums['{}_x'.format(depth)] += reducedChlOcx[j]
 					chl_ocx_sums['{}_x2'.format(depth)] += reducedChlOcx[j]*reducedChlOcx[j]
-			if(~np.isnan(reducedKd490[j])):
+			if(~np.isnan(reducedKd490[j]) and MODIS_valid_range(reducedKd490[j], 'Kd_490')):
 				if('{}_n'.format(depth) not in Kd_490_sums):
 					Kd_490_sums['{}_n'.format(depth)] = 1
 					Kd_490_sums['{}_x'.format(depth)] = reducedKd490[j]
@@ -115,7 +131,7 @@ for i in range(len(data_list)):
 					Kd_490_sums['{}_n'.format(depth)] += 1
 					Kd_490_sums['{}_x'.format(depth)] += reducedKd490[j]
 					Kd_490_sums['{}_x2'.format(depth)] += reducedKd490[j]*reducedKd490[j]
-			if(~np.isnan(reducedPoc[j])):
+			if(~np.isnan(reducedPoc[j]) and MODIS_valid_range(reducedPoc[j], 'poc')):
 				if('{}_n'.format(depth) not in poc_sums):
 					poc_sums['{}_n'.format(depth)] = 1
 					poc_sums['{}_x'.format(depth)] = reducedPoc[j]
@@ -124,7 +140,7 @@ for i in range(len(data_list)):
 					poc_sums['{}_n'.format(depth)] += 1
 					poc_sums['{}_x'.format(depth)] += reducedPoc[j]
 					poc_sums['{}_x2'.format(depth)] += reducedPoc[j]*reducedPoc[j]
-			if(~np.isnan(reducedNflh[j])):
+			if(~np.isnan(reducedNflh[j]) and MODIS_valid_range(reducedNflh[j], 'nflh')):
 				if('{}_n'.format(depth) not in nflh_sums):
 					nflh_sums['{}_n'.format(depth)] = 1
 					nflh_sums['{}_x'.format(depth)] = reducedNflh[j]
@@ -134,9 +150,51 @@ for i in range(len(data_list)):
 					nflh_sums['{}_x'.format(depth)] += reducedNflh[j]
 					nflh_sums['{}_x2'.format(depth)] += reducedNflh[j]*reducedNflh[j]
 
+			if(~np.isnan(reducedPar[j]) and MODIS_valid_range(reducedPar[j], 'par')):
+				if('{}_n'.format(depth) not in par_sums):
+					par_sums['{}_n'.format(depth)] = 1
+					par_sums['{}_x'.format(depth)] = reducedPar[j]
+					par_sums['{}_x2'.format(depth)] = reducedPar[j]*reducedPar[j]
+				else:
+					par_sums['{}_n'.format(depth)] += 1
+					par_sums['{}_x'.format(depth)] += reducedPar[j]
+					par_sums['{}_x2'.format(depth)] += reducedPar[j]*reducedPar[j]
+			if(~np.isnan(reducedRrs_443[j]) and MODIS_valid_range(reducedRrs_443[j], 'Rrs_443')):
+				if('{}_n'.format(depth) not in Rrs_443_sums):
+					Rrs_443_sums['{}_n'.format(depth)] = 1
+					Rrs_443_sums['{}_x'.format(depth)] = reducedRrs_443[j]
+					Rrs_443_sums['{}_x2'.format(depth)] = reducedRrs_443[j]*reducedRrs_443[j]
+				else:
+					Rrs_443_sums['{}_n'.format(depth)] += 1
+					Rrs_443_sums['{}_x'.format(depth)] += reducedRrs_443[j]
+					Rrs_443_sums['{}_x2'.format(depth)] += reducedRrs_443[j]*reducedRrs_443[j]
+			if(~np.isnan(reducedRrs_469[j]) and MODIS_valid_range(reducedRrs_469[j], 'Rrs_469')):
+				if('{}_n'.format(depth) not in Rrs_469_sums):
+					Rrs_469_sums['{}_n'.format(depth)] = 1
+					Rrs_469_sums['{}_x'.format(depth)] = reducedRrs_469[j]
+					Rrs_469_sums['{}_x2'.format(depth)] = reducedRrs_469[j]*reducedRrs_469[j]
+				else:
+					Rrs_469_sums['{}_n'.format(depth)] += 1
+					Rrs_469_sums['{}_x'.format(depth)] += reducedRrs_469[j]
+					Rrs_469_sums['{}_x2'.format(depth)] += reducedRrs_469[j]*reducedRrs_469[j]
+			if(~np.isnan(reducedRrs_488[j]) and MODIS_valid_range(reducedRrs_488[j], 'Rrs_488')):
+				if('{}_n'.format(depth) not in Rrs_488_sums):
+					Rrs_488_sums['{}_n'.format(depth)] = 1
+					Rrs_488_sums['{}_x'.format(depth)] = reducedRrs_488[j]
+					Rrs_488_sums['{}_x2'.format(depth)] = reducedRrs_488[j]*reducedRrs_488[j]
+				else:
+					Rrs_488_sums['{}_n'.format(depth)] += 1
+					Rrs_488_sums['{}_x'.format(depth)] += reducedRrs_488[j]
+					Rrs_488_sums['{}_x2'.format(depth)] += reducedRrs_488[j]*reducedRrs_488[j]
+
 np.save(save_folder+'/angstrom_sums.npy', angstrom_sums)
 np.save(save_folder+'/chlor_a_sums.npy', chlor_a_sums)
 np.save(save_folder+'/chl_ocx_sums.npy', chl_ocx_sums)
 np.save(save_folder+'/Kd_490_sums.npy', Kd_490_sums)
 np.save(save_folder+'/poc_sums.npy', poc_sums)
 np.save(save_folder+'/nflh_sums.npy', nflh_sums)
+
+np.save(save_folder+'/par_sums.npy', par_sums)
+np.save(save_folder+'/Rrs_443_sums.npy', Rrs_443_sums)
+np.save(save_folder+'/Rrs_469_sums.npy', Rrs_469_sums)
+np.save(save_folder+'/Rrs_488_sums.npy', Rrs_488_sums)

@@ -12,7 +12,7 @@ from model import *
 from dataset import *
 from utils import *
 from convertROC import *
-from hycom_dist_parcels import *
+#from hycom_dist_parcels import *
 from file_search_netCDF import *
 from convertFeaturesByDepth import *
 from convertFeaturesByPosition import *
@@ -28,7 +28,7 @@ import json
 from configparser import ConfigParser
 import matplotlib.pyplot as plt
 
-configfilename = 'date_train_test_depth_norm_w_knn_2000_2012'
+configfilename = 'date_train_test_depth_norm_w_knn'
 
 config = ConfigParser()
 config.read('configfiles/'+configfilename+'.ini')
@@ -94,7 +94,8 @@ paired_df = pd.read_pickle('paired_dataset.pkl')
 #	'Rrs_531', 'Rrs_547', 'Rrs_555', 'Rrs_645',\
 #	'Rrs_667', 'Rrs_678', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'par', 'ipar', 'nflh', 'Red Tide Concentration']
 #features_to_use=['Sample Date', 'Latitude', 'Longitude', 'aot_869', 'par', 'ipar', 'angstrom', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'nflh', 'bedrock', 'Red Tide Concentration', 'Rrs_443', 'Rrs_555', 'Rrs_667', 'Rrs_678']
-features_to_use=['Sample Date', 'Latitude', 'Longitude', 'angstrom', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'nflh', 'bedrock', 'Red Tide Concentration', 'Rrs_443', 'Rrs_555', 'Rrs_667', 'Rrs_678', 'Rrs_469', 'Rrs_488', 'Rrs_531']
+#features_to_use=['Sample Date', 'Latitude', 'Longitude', 'angstrom', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'nflh', 'bedrock', 'Red Tide Concentration', 'Rrs_443', 'Rrs_555', 'Rrs_667', 'Rrs_678', 'Rrs_469', 'Rrs_488', 'Rrs_531']
+features_to_use=['Sample Date', 'Latitude', 'Longitude', 'par', 'Kd_490', 'chlor_a', 'Rrs_443', 'Rrs_469', 'Rrs_488', 'nflh', 'bedrock', 'Red Tide Concentration', 'Rrs_555', 'Rrs_667', 'Rrs_678', 'Rrs_531', 'chl_ocx']
 
 paired_df = paired_df[features_to_use]
 
@@ -115,16 +116,17 @@ features_shehhi = paired_df[['nflh']].to_numpy().copy()
 features_SS488 = paired_df[['Rrs_469', 'Rrs_488', 'Rrs_531']].to_numpy().copy()
 #features_cannizzaro = paired_df[['chl_ocx', 'Rrs_443', 'Rrs_555']].to_numpy().copy()
 
-features = paired_df[features_to_use[1:-8]]
-features_used = features_to_use[3:-9]
+features = paired_df[features_to_use[1:-6]]
+features_used = features_to_use[3:-7]
 
 features = np.array(features.values)
+
 if(normalization == 0):
 	features = features[:, 2:-1]
 elif(normalization == 1):
-	features = convertFeaturesByDepth(features[:, 2:], features_to_use[3:-9])
+	features = convertFeaturesByDepth(features[:, 2:], features_to_use[3:-7])
 elif(normalization == 2):
-	features = convertFeaturesByPosition(features[:, :-1], features_to_use[3:-9])
+	features = convertFeaturesByPosition(features[:, :-1], features_to_use[3:-7])
 
 if(use_nn_feature == 1):
 	nn_classes = np.load('saved_model_info/'+configfilename+'/nn_classes.npy')
@@ -134,6 +136,9 @@ if(use_nn_feature == 2):
 	knn_concs = np.load('saved_model_info/'+configfilename+'/knn_concs.npy')
 	features = np.concatenate((features, np.expand_dims(knn_concs, axis=1)), axis=1)
 	features_used.append('weighted_knn_conc')
+
+np.save('good_features.npy', features)
+asdf
 
 concentrations = red_tide
 classes = np.zeros((concentrations.shape[0], 1))
@@ -240,7 +245,7 @@ for model_number in range(len(randomseeds)):
 	knn_preds = np.zeros((output.shape[0]))
 	knn_concs = np.zeros((output.shape[0]))
 	nn_concs = np.zeros((output.shape[0]))
-	hycom_concs = np.zeros((output.shape[0]))
+	#hycom_concs = np.zeros((output.shape[0]))
 	#Do some nearest neighbor thing with the last week's samples
 	for i in range(len(reducedDates)):
 		if(i%100 == 0):
@@ -278,37 +283,37 @@ for model_number in range(len(randomseeds)):
 
 
 			### Do HYCOM distance things
-			previous_dates = pd.DatetimeIndex(df_dates['Sample Date'][week_prior_inds])
+			#previous_dates = pd.DatetimeIndex(df_dates['Sample Date'][week_prior_inds])
 
-			earlieststartdatetime = previous_dates[0]
-			for j in range(len(previous_dates)):
-				if(previous_dates[j] < earlieststartdatetime):
-					earlieststartdatetime = previous_dates[j]
+			#earlieststartdatetime = previous_dates[0]
+			#for j in range(len(previous_dates)):
+			#	if(previous_dates[j] < earlieststartdatetime):
+			#		earlieststartdatetime = previous_dates[j]
 
-			found_file_search_ind = file_search_netCDF(earlieststartdatetime, hycom_dates)
-			found_file_target_ind = file_search_netCDF(searchdate, hycom_dates)
+			#found_file_search_ind = file_search_netCDF(earlieststartdatetime, hycom_dates)
+			#found_file_target_ind = file_search_netCDF(searchdate, hycom_dates)
 
-			simulation_file_list = []
-			for j in range(found_file_search_ind, found_file_target_ind+1):
-				simulation_file_list.append(hycom_data+'netCDF4_file'+str(j)+'.nc')
+			#simulation_file_list = []
+			#for j in range(found_file_search_ind, found_file_target_ind+1):
+			#	simulation_file_list.append(hycom_data+'netCDF4_file'+str(j)+'.nc')
 
 			#If parcels fails for some reason, use euclidean distance
-			try:
-				hycom_distances = hycom_dist_parcels(simulation_file_list, previous_dates, df_lats[week_prior_inds], df_lons[week_prior_inds], searchdate, reducedLatitudes[i], reducedLongitudes[i], filename_lon, filename_lat)
-			except Exception as e:
-				print(e)
-				hycom_distances = physicalDistance/100
+			#try:
+			#	hycom_distances = hycom_dist_parcels(simulation_file_list, previous_dates, df_lats[week_prior_inds], df_lons[week_prior_inds], searchdate, reducedLatitudes[i], reducedLongitudes[i], filename_lon, filename_lat)
+			#except Exception as e:
+			#	print(e)
+			#	hycom_distances = physicalDistance/100
 
 			#Remove nans and infs if they somehow slip through
-			hycom_badidx = [k for k, arr in enumerate(hycom_distances) if not np.isfinite(arr).all()]
-			hycom_distances[hycom_badidx] = physicalDistance[hycom_badidx]/100
+			#hycom_badidx = [k for k, arr in enumerate(hycom_distances) if not np.isfinite(arr).all()]
+			#hycom_distances[hycom_badidx] = physicalDistance[hycom_badidx]/100
 
-			hycom_zeroidx = [k for k, arr in enumerate(hycom_distances) if hycom_distances[k]==0]
-			hycom_distances[hycom_zeroidx] = 0.5
+			#hycom_zeroidx = [k for k, arr in enumerate(hycom_distances) if hycom_distances[k]==0]
+			#hycom_distances[hycom_zeroidx] = 0.5
 
-			inverseDistance = 1/hycom_distances
-			NN_weights = inverseDistance/np.sum(inverseDistance)
-			hycom_concs[i] = np.sum(NN_weights*df_concs_log[week_prior_inds])
+			#inverseDistance = 1/hycom_distances
+			#NN_weights = inverseDistance/np.sum(inverseDistance)
+			#hycom_concs[i] = np.sum(NN_weights*df_concs_log[week_prior_inds])
 		else:
 			nn_concs[i] = 0
 			nn_preds[i] = 0
@@ -409,15 +414,15 @@ for model_number in range(len(randomseeds)):
 		refTprKNN = np.expand_dims(refTprKNN, axis=1)
 		tprsKNN = np.concatenate((tprsKNN, refTprKNN), axis=1)
 
-	fpr, tpr, thresholds = roc_curve(testClasses, hycom_concs)
-	if(model_number == 0):
-		refFprHYCOM = fpr
-		tprsHYCOM = tpr
-		tprsHYCOM = np.expand_dims(tprsHYCOM, axis=1)
-	else:
-		refTprHYCOM = convertROC(fpr, tpr, refFprHYCOM)
-		refTprHYCOM = np.expand_dims(refTprHYCOM, axis=1)
-		tprsHYCOM = np.concatenate((tprsHYCOM, refTprHYCOM), axis=1)
+	#fpr, tpr, thresholds = roc_curve(testClasses, hycom_concs)
+	#if(model_number == 0):
+	#	refFprHYCOM = fpr
+	#	tprsHYCOM = tpr
+	#	tprsHYCOM = np.expand_dims(tprsHYCOM, axis=1)
+	#else:
+	#	refTprHYCOM = convertROC(fpr, tpr, refFprHYCOM)
+	#	refTprHYCOM = np.expand_dims(refTprHYCOM, axis=1)
+	#	tprsHYCOM = np.concatenate((tprsHYCOM, refTprHYCOM), axis=1)
 
 	fpr, tpr, thresholds = roc_curve(testClasses, outputStumpf)
 	if(model_number == 0):
@@ -507,10 +512,10 @@ fpr_and_tprsKNN = np.concatenate((refFprKNN, tprsKNN), axis=1)
 
 np.save(filename_roc_curve_info+'/'+configfilename.split('_')[0]+'_KNN.npy', fpr_and_tprsKNN)
 
-refFprHYCOM = np.expand_dims(refFprHYCOM, axis=1)
-fpr_and_tprsHYCOM = np.concatenate((refFprHYCOM, tprsHYCOM), axis=1)
+#refFprHYCOM = np.expand_dims(refFprHYCOM, axis=1)
+#fpr_and_tprsHYCOM = np.concatenate((refFprHYCOM, tprsHYCOM), axis=1)
 
-np.save(filename_roc_curve_info+'/'+configfilename.split('_')[0]+'_HYCOM.npy', fpr_and_tprsHYCOM)
+#np.save(filename_roc_curve_info+'/'+configfilename.split('_')[0]+'_HYCOM.npy', fpr_and_tprsHYCOM)
 
 refFprStumpf = np.expand_dims(refFprStumpf, axis=1)
 fpr_and_tprsStumpf = np.concatenate((refFprStumpf, tprsStumpf), axis=1)

@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 
 np.set_printoptions(threshold=sys.maxsize)
 
-configfilename = 'date_train_test_depth_norm_w_knn_2000_2012'
+configfilename = 'random_train_test_depth_norm_w_knn'
 
 config = ConfigParser()
 config.read('configfiles/'+configfilename+'.ini')
@@ -45,7 +45,8 @@ paired_df = pd.read_pickle('paired_dataset.pkl')
 #	'Rrs_531', 'Rrs_547', 'Rrs_555', 'Rrs_645',\
 #	'Rrs_667', 'Rrs_678', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'par', 'ipar', 'nflh', 'Red Tide Concentration']
 #features_to_use=['Sample Date', 'Latitude', 'Longitude', 'aot_869', 'par', 'ipar', 'angstrom', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'nflh', 'bedrock', 'Red Tide Concentration', 'Rrs_443', 'Rrs_555']
-features_to_use=['Sample Date', 'Latitude', 'Longitude', 'angstrom', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'nflh', 'bedrock', 'Red Tide Concentration', 'Rrs_443', 'Rrs_555']
+#features_to_use=['Sample Date', 'Latitude', 'Longitude', 'angstrom', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'nflh', 'bedrock', 'Red Tide Concentration', 'Rrs_443', 'Rrs_555']
+features_to_use=['Sample Date', 'Latitude', 'Longitude', 'par', 'Kd_490', 'chlor_a', 'Rrs_443', 'Rrs_469', 'Rrs_488', 'nflh', 'bedrock', 'Red Tide Concentration']
 
 paired_df = paired_df[features_to_use]
 
@@ -57,15 +58,16 @@ dates = paired_df['Sample Date'].to_numpy().copy()
 latitudes = paired_df['Latitude'].to_numpy().copy()
 longitudes = paired_df['Longitude'].to_numpy().copy()
 
-features = paired_df[features_to_use[1:-3]]
+features = paired_df[features_to_use[1:-1]]
 features = np.array(features.values)
+
 
 if(normalization == 0):
 	features = features[:, 2:-1]
 elif(normalization == 1):
-	features = convertFeaturesByDepth(features[:, 2:], features_to_use[3:-4])
+	features = convertFeaturesByDepth(features[:, 2:], features_to_use[3:-2])
 elif(normalization == 2):
-	features = convertFeaturesByPosition(features[:, :-1], features_to_use[3:-4])
+	features = convertFeaturesByPosition(features[:, :-1], features_to_use[3:-2])
 
 concentrations = red_tide
 classes = np.zeros((concentrations.shape[0], 1))
@@ -204,19 +206,21 @@ for model_number in range(len(randomseeds)):
 
 	usedClasses = classes[reducedInds]
 
-	original_featuresTensor = torch.tensor(original_features)
+	if(use_nn_feature == 3):
+		original_featuresTensor = torch.tensor(original_features)
 	featuresTensor = torch.tensor(features)
 
-	reducedOriginalFeaturesTensor = original_featuresTensor[reducedInds, :]
+	if(use_nn_feature == 3):
+		reducedOriginalFeaturesTensor = original_featuresTensor[reducedInds, :]
 	reducedFeaturesTensor = featuresTensor[reducedInds, :]
 
 	usedDates = dates[reducedInds]
 	usedLatitudes = latitudes[reducedInds]
 
-	#years_in_data = [2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,\
-	#				 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019]
 	years_in_data = [2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,\
-					 2010, 2011, 2012]
+					 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019]
+	#years_in_data = [2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,\
+	#				 2010, 2011, 2012]
 
 	if(traintest_split == 0):
 		trainInds = sample(range(reducedFeaturesTensor.shape[0]), int(0.8*reducedFeaturesTensor.shape[0]))
@@ -231,8 +235,9 @@ for model_number in range(len(randomseeds)):
 		trainInds = np.logical_or(usedLatitudes >= 27, usedLatitudes < 26.5)
 		testInds = np.logical_and(usedLatitudes < 27, usedLatitudes >= 26.5)
 
-	originalTrainSet = reducedOriginalFeaturesTensor[trainInds, :].float().cuda()
-	originalTestSet = reducedOriginalFeaturesTensor[testInds, :].float().cuda()
+	if(use_nn_feature == 3):
+		originalTrainSet = reducedOriginalFeaturesTensor[trainInds, :].float().cuda()
+		originalTestSet = reducedOriginalFeaturesTensor[testInds, :].float().cuda()
 	trainSet = reducedFeaturesTensor[trainInds, :].float().cuda()
 	testSet = reducedFeaturesTensor[testInds, :].float().cuda()
 
@@ -255,8 +260,9 @@ for model_number in range(len(randomseeds)):
 	trainTargets = torch.Tensor(trainTargets).float().cuda()
 	testTargets = torch.Tensor(testTargets).float().cuda()
 
-	originalTrainDataset = RedTideDataset(originalTrainSet, trainTargets)
-	originalTrainDataloader = DataLoader(originalTrainDataset, batch_size=mb_size, shuffle=True)
+	if(use_nn_feature == 3):
+		originalTrainDataset = RedTideDataset(originalTrainSet, trainTargets)
+		originalTrainDataloader = DataLoader(originalTrainDataset, batch_size=mb_size, shuffle=True)
 	trainDataset = RedTideDataset(trainSet, trainTargets)
 	trainDataloader = DataLoader(trainDataset, batch_size=mb_size, shuffle=True)
 
