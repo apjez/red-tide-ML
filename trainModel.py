@@ -1,3 +1,5 @@
+import os
+import socket
 import pandas as pd
 import sys
 from scipy import stats
@@ -15,14 +17,27 @@ from convertFeaturesByDepth import *
 from convertFeaturesByPosition import *
 import datetime as dt
 from torch.utils.data import DataLoader, Dataset
+import torch.distributed as dist
+from torch.multiprocessing import Process
 from sklearn.metrics import accuracy_score, confusion_matrix
 import json
 from configparser import ConfigParser
 import matplotlib.pyplot as plt
 
+# Setup for torch.distributed and process initialization
+world_size = int(os.environ['OMPI_COMM_WORLD_SIZE']) #USE MV2_COMM_WORLD_SIZE if using MVAPICH2 for MPI
+world_rank = int(os.environ['OMPI_COMM_WORLD_RANK']) #USE MV2_COMM_WORLD_RANK if using MVAPICH2 for MPI
+ngpus_per_node=torch.cuda.device_count()
+hostname = socket.gethostname()
+os.environ['MASTER_ADDR'] = '172.27.68.240'
+os.environ['MASTER_PORT'] = '8933'
+dist.init_process_group("nccl",init_method='env://', rank=world_rank, world_size=world_size)
+gpu=dist.get_rank()%ngpus_per_node
+torch.cuda.set_device(gpu)
+
 np.set_printoptions(threshold=sys.maxsize)
 
-configfilename = 'random_train_test_depth_norm_w_knn'
+configfilename = 'date_train_test_depth_norm_w_knn'
 
 config = ConfigParser()
 config.read('configfiles/'+configfilename+'.ini')
@@ -45,8 +60,7 @@ paired_df = pd.read_pickle('paired_dataset.pkl')
 #	'Rrs_531', 'Rrs_547', 'Rrs_555', 'Rrs_645',\
 #	'Rrs_667', 'Rrs_678', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'par', 'ipar', 'nflh', 'Red Tide Concentration']
 #features_to_use=['Sample Date', 'Latitude', 'Longitude', 'aot_869', 'par', 'ipar', 'angstrom', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'nflh', 'bedrock', 'Red Tide Concentration', 'Rrs_443', 'Rrs_555']
-#features_to_use=['Sample Date', 'Latitude', 'Longitude', 'angstrom', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'nflh', 'bedrock', 'Red Tide Concentration', 'Rrs_443', 'Rrs_555']
-features_to_use=['Sample Date', 'Latitude', 'Longitude', 'par', 'Kd_490', 'chlor_a', 'Rrs_443', 'Rrs_469', 'Rrs_488', 'nflh', 'bedrock', 'Red Tide Concentration']
+features_to_use=['Sample Date', 'Latitude', 'Longitude', 'angstrom', 'chlor_a', 'chl_ocx', 'Kd_490', 'poc', 'nflh', 'bedrock', 'Red Tide Concentration', 'Rrs_443', 'Rrs_555']
 
 paired_df = paired_df[features_to_use]
 
@@ -58,16 +72,15 @@ dates = paired_df['Sample Date'].to_numpy().copy()
 latitudes = paired_df['Latitude'].to_numpy().copy()
 longitudes = paired_df['Longitude'].to_numpy().copy()
 
-features = paired_df[features_to_use[1:-1]]
+features = paired_df[features_to_use[1:-3]]
 features = np.array(features.values)
-
 
 if(normalization == 0):
 	features = features[:, 2:-1]
 elif(normalization == 1):
-	features = convertFeaturesByDepth(features[:, 2:], features_to_use[3:-2])
+	features = convertFeaturesByDepth(features[:, 2:], features_to_use[3:-4])
 elif(normalization == 2):
-	features = convertFeaturesByPosition(features[:, :-1], features_to_use[3:-2])
+	features = convertFeaturesByPosition(features[:, :-1], features_to_use[3:-4])
 
 concentrations = red_tide
 classes = np.zeros((concentrations.shape[0], 1))
@@ -158,22 +171,24 @@ if(use_nn_feature == 1 or use_nn_feature == 2 or use_nn_feature == 3):
 			nn_classes[i] = 0
 
 	if(use_nn_feature == 1):
-		ensure_folder('saved_model_info/'+configfilename)
-		np.save('saved_model_info/'+configfilename+'/nn_classes.npy', nn_classes)
-		original_features = np.copy(features)
+		if world_rank == 0:
+			ensure_folder('saved_model_info/'+configfilename)
+			np.save('saved_model_info/'+configfilename+'/nn_classes.npy', nn_classes)
+			original_features = np.copy(features)
 		features = np.concatenate((features, np.expand_dims(nn_classes, axis=1)), axis=1)
 	if(use_nn_feature == 2):
-		ensure_folder('saved_model_info/'+configfilename)
-		np.save('saved_model_info/'+configfilename+'/knn_concs.npy', knn_concs)
-		original_features = np.copy(features)
+		if world_rank == 0:
+			ensure_folder('saved_model_info/'+configfilename)
+			np.save('saved_model_info/'+configfilename+'/knn_concs.npy', knn_concs)
+			original_features = np.copy(features)
 		features = np.concatenate((features, np.expand_dims(knn_concs, axis=1)), axis=1)
 	if(use_nn_feature == 3):
-		ensure_folder('saved_model_info/'+configfilename)
-		np.save('saved_model_info/'+configfilename+'/knn_concs.npy', knn_concs)
-		original_features = np.copy(features)
+		if world_rank == 0:
+			ensure_folder('saved_model_info/'+configfilename)
+			np.save('saved_model_info/'+configfilename+'/knn_concs.npy', knn_concs)
+			original_features = np.copy(features)
+			np.save('saved_model_info/'+configfilename+'/nearest_sample_dist.npy', nearest_sample_dist)
 		features = np.concatenate((features, np.expand_dims(knn_concs, axis=1)), axis=1)
-		np.save('saved_model_info/'+configfilename+'/nearest_sample_dist.npy', nearest_sample_dist)
-
 
 
 
@@ -206,21 +221,19 @@ for model_number in range(len(randomseeds)):
 
 	usedClasses = classes[reducedInds]
 
-	if(use_nn_feature == 3):
-		original_featuresTensor = torch.tensor(original_features)
+	#original_featuresTensor = torch.tensor(original_features)
 	featuresTensor = torch.tensor(features)
 
-	if(use_nn_feature == 3):
-		reducedOriginalFeaturesTensor = original_featuresTensor[reducedInds, :]
+	#reducedOriginalFeaturesTensor = original_featuresTensor[reducedInds, :]
 	reducedFeaturesTensor = featuresTensor[reducedInds, :]
 
 	usedDates = dates[reducedInds]
 	usedLatitudes = latitudes[reducedInds]
 
-	years_in_data = [2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,\
-					 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019]
 	#years_in_data = [2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,\
-	#				 2010, 2011, 2012]
+	#				 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019]
+	years_in_data = [2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,\
+					 2010, 2011, 2012]
 
 	if(traintest_split == 0):
 		trainInds = sample(range(reducedFeaturesTensor.shape[0]), int(0.8*reducedFeaturesTensor.shape[0]))
@@ -235,9 +248,8 @@ for model_number in range(len(randomseeds)):
 		trainInds = np.logical_or(usedLatitudes >= 27, usedLatitudes < 26.5)
 		testInds = np.logical_and(usedLatitudes < 27, usedLatitudes >= 26.5)
 
-	if(use_nn_feature == 3):
-		originalTrainSet = reducedOriginalFeaturesTensor[trainInds, :].float().cuda()
-		originalTestSet = reducedOriginalFeaturesTensor[testInds, :].float().cuda()
+	#originalTrainSet = reducedOriginalFeaturesTensor[trainInds, :].float().cuda()
+	#originalTestSet = reducedOriginalFeaturesTensor[testInds, :].float().cuda()
 	trainSet = reducedFeaturesTensor[trainInds, :].float().cuda()
 	testSet = reducedFeaturesTensor[testInds, :].float().cuda()
 
@@ -260,16 +272,18 @@ for model_number in range(len(randomseeds)):
 	trainTargets = torch.Tensor(trainTargets).float().cuda()
 	testTargets = torch.Tensor(testTargets).float().cuda()
 
-	if(use_nn_feature == 3):
-		originalTrainDataset = RedTideDataset(originalTrainSet, trainTargets)
-		originalTrainDataloader = DataLoader(originalTrainDataset, batch_size=mb_size, shuffle=True)
+	#originalTrainDataset = RedTideDataset(originalTrainSet, trainTargets)
+	#originalTrainDataloader = DataLoader(originalTrainDataset, batch_size=mb_size, shuffle=True)
 	trainDataset = RedTideDataset(trainSet, trainTargets)
-	trainDataloader = DataLoader(trainDataset, batch_size=mb_size, shuffle=True)
+	trainSampler = torch.utils.data.distributed.DistributedSampler(trainDataset,num_replicas=world_size,rank=world_rank)
+	trainDataloader = DataLoader(trainDataset,batch_size=mb_size*10,sampler=trainSampler)
 
-	if(use_nn_feature == 3):
-		originalPredictor = Predictor(originalTrainSet.shape[1], num_classes).cuda()
-		originalOptimizer = optim.Adam(originalPredictor.parameters(), lr=learning_rate)
+
+	#if(use_nn_feature == 3):
+#		originalPredictor = Predictor(originalTrainSet.shape[1], num_classes).cuda()
+#		originalOptimizer = optim.Adam(originalPredictor.parameters(), lr=learning_rate)
 	predictor = Predictor(trainSet.shape[1], num_classes).cuda()
+	predictor = torch.nn.parallel.DistributedDataParallel(predictor,device_ids=[gpu],output_device=gpu)
 	optimizer = optim.Adam(predictor.parameters(), lr=learning_rate)
 
 	losses = np.zeros((numEpochs, 1))
@@ -293,23 +307,23 @@ for model_number in range(len(randomseeds)):
 		if(i%10==0):
 			print('Epoch: {}, Loss: {}'.format(i, epochLoss))
 		losses[i] = epochLoss
+	if world_rank==0:
+		plt.figure()
+		plt.plot(losses)
+		plt.savefig('losses.png')
 
-	plt.figure()
-	plt.plot(losses)
-	plt.savefig('losses.png')
+		testOutput = predictor(testSet).cpu().detach().numpy()
+		testOutput = np.argmax(testOutput, axis=1)
+		print(confusion_matrix(testClasses, testOutput))
 
-	testOutput = predictor(testSet).cpu().detach().numpy()
-	testOutput = np.argmax(testOutput, axis=1)
-	print(confusion_matrix(testClasses, testOutput))
+		ensure_folder('saved_model_info/'+configfilename)
 
-	ensure_folder('saved_model_info/'+configfilename)
+		if(use_nn_feature == 3):
+			torch.save(originalPredictor.state_dict(), 'saved_model_info/'+configfilename+'/originalPredictor{}.pt'.format(model_number))
+		torch.save(predictor.state_dict(), 'saved_model_info/'+configfilename+'/predictor{}.pt'.format(model_number))
+		np.save('saved_model_info/'+configfilename+'/reducedInds{}.npy'.format(model_number), reducedInds)
+		np.save('saved_model_info/'+configfilename+'/testInds{}.npy'.format(model_number), testInds)
 
-	if(use_nn_feature == 3):
-		torch.save(originalPredictor.state_dict(), 'saved_model_info/'+configfilename+'/originalPredictor{}.pt'.format(model_number))
-	torch.save(predictor.state_dict(), 'saved_model_info/'+configfilename+'/predictor{}.pt'.format(model_number))
-	np.save('saved_model_info/'+configfilename+'/reducedInds{}.npy'.format(model_number), reducedInds)
-	np.save('saved_model_info/'+configfilename+'/testInds{}.npy'.format(model_number), testInds)
+		endtime = time.time()
 
-	endtime = time.time()
-
-	print('Model training time: {}'.format(endtime-starttime))
+		print('Model training time: {}'.format(endtime-starttime))
